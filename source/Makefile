@@ -7,7 +7,7 @@ CC = gcc
 CFLAGS = -Wall -g
 
 # The name of your final executable program
-TARGET = projectf
+TARGET = pf
 
 # List of your source (.c) files
 SRCS = main.c lexer.c

@@ -2,6 +2,41 @@
 #include <stdlib.h>
 #include "lexer.h"
 
+char* lookup[] = {
+	"E_O_F",
+	"SEMICOLON",
+	"COLON",
+	"LCURL",
+	"RCURL",
+	"LSQUR",
+	"RSQUR",
+	"LPAREN",
+	"RPAREN",
+	"PLUS",
+	"MINUS",
+	"MODULUS",
+	"MUL",
+	"DIV",
+	"EQUALS",
+	"ASSIGN",
+	"NEQUALS",
+	"NOT",
+	"DQUOTE",
+	"SQUOTE",
+	"NUM",
+	"IF",
+	"ELSE",
+	"WHILE",
+	"INT",
+	"LONG",
+	"BOOL",
+	"CHAR",
+	"STR",
+	"TRUE",
+	"FALSE",
+	"ID"
+};
+
 char *parseArgs(int argc, char *argv[]) {
 
 	// Currently only one argument (the about to be compiled file) is accepted
@@ -61,7 +96,11 @@ int main(int argc, char *argv[]) {
 	Token *token = getToken();
 
 	while (token->type != E_O_F) {
-		printf("_______________\nType:   %d     \nString: %.*s\n", token->type, token->length, token->start);
+		printf("%s\t\t\t%.*s\n", lookup[token->type], token->length, token->start);
+		free(token);
 		token = getToken();
 	}
+
+	free(token);
+	free(buffer);
 }
