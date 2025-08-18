@@ -2,6 +2,33 @@
 #define PARSER_H
 
 typedef struct Expression Expression;
+typedef struct Statement Statement;
+typedef struct BinOperation BinOperation;
+typedef struct Assignment Assignment;
+typedef struct Declaration Declaration;
+typedef struct Variable Variable;
+typedef struct Value Value;
+
+typedef enum {
+	EXPRESSION_STMT,
+	ASSIGN_STMT,
+	DECLARATION_EXPR
+} StatementType;
+
+typedef enum {
+	ASSIGN_EXPR,
+	BINOP_EXPR,
+	VALUE_EXPR,
+} ExpressionType;
+
+typedef enum {
+	ADD_OP,
+	SUB_OP,
+	MUL_OP,
+	DIV_OP,
+	EQ_OP,
+	NEQ_OP
+} BinOperationType;
 
 typedef enum {
 	INT_TYPE,
@@ -13,65 +40,58 @@ typedef enum {
 	STR_TYPE
 } ValueType;
 
-typedef struct { 
-	ValueType type;
+struct Statement {
+	StatementType type;
 	union {
-		int i_16;
-		long i_32;
-		long long i_64;
-		float fl;
-		double dfl;
-		char ch;
-		char* str;
-	} vals;
-} Value;
-
-typedef struct {
-	char* id;
-	Value* val;
-} Variable;
-
-typedef struct {
-	Variable* var;
-	Expression* value;
-} Assign;
-
-typedef struct {
-	Variable* variable;
-	Assign* assign;
-} Declaration;
-
-typedef enum {
-	ADD_OP,
-	SUB_OP,
-	MUL_OP,
-	DIV_OP,
-	EQ_OP,
-	NEQ_OP
-} BinOperationType;
-
-typedef struct {
-	BinOperationType type;
-	Expression* left;
-	Expression* right;
-
-} BinOperation;
-
-typedef enum {
-	ASSIGN_EXPR,
-	BINOP_EXPR,
-	VALUE_EXPR,
-	DECLARATIO_EXPR
-} ExpressionType;
+		Expression* expression;
+		Assignment* assignment;
+		Declaration* declaration;
+	} as;
+};
 
 struct Expression {
 	ExpressionType type;
 	union {
-		Assign* assign;
 		BinOperation* binop;
+		Assignment* assignment;
+		Variable* variable;
 		Value* value;
-		Declaration* declaration;
-	} next;
+	} as;
+};
+
+struct BinOperation {
+	BinOperationType type;
+	Expression* left;
+	Expression* right;
+
+};
+
+struct Assignment {
+	Variable* var;
+	Expression* value;
+};
+
+struct Declaration {
+	char* name;
+	ValueType type;
+	Expression* initializer;
+};
+
+struct Variable {
+	char* id;
+};
+
+struct Value {
+	ValueType* type;
+	union {
+		int i_16;
+		long i_32;
+		long long i_64;
+		float f;
+		double df;
+		char ch;
+		char* str;
+	} as;
 };
 
 #endif
