@@ -2,22 +2,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <stdbool.h>
 
-char *buff;
+char* buff;
 int idx;
 
-void initializeLexer(char *b) {
+void initializeLexer(char* b) {
 	buff = b;
 	idx = 0;
 }
 
-Token *getToken() {
+Token* getToken() {
 
 	while (buff[idx] == ' ' || buff[idx] == '\n' || buff[idx] == '\t' || buff[idx] == ' ' || buff[idx] == '\r') {
 		idx++;
 	}
 
-	Token *token = malloc(sizeof(Token));
+	Token* token = malloc(sizeof(Token));
 	token->start = &buff[idx];
 	token->length = 1;
 
@@ -86,7 +87,7 @@ Token *getToken() {
 		case '"':
 			token->type = DQUOTE;
 			while (buff[idx + token->length] != '"' && buff[idx + token->length] != '\0') {
-token->length++;
+				token->length++;
 			}
 			token->length++; 
 			break;
@@ -100,13 +101,42 @@ token->length++;
 		default:
 
 			if (isdigit(buff[idx])) {
-				token->type = NUM;
-				while (isdigit(buff[idx + token->length])) {
+				token->type = INT;
+				bool isFloat = false;
+				while (isdigit(buff[idx + token->length]) || buff[idx + token->length] == '.') {
+					if (buff[idx + token->length] == '.') {
+						if (isFloat) {
+							fprintf(stderr, "INVALID NUMBER TOKEN WITH MORE THAN ONE FLOAT IDENTIFIER\n");
+							free(token);
+							return NULL;
+						}
+						isFloat = true;
+						token->type = FLOAT;
+					}
 					token->length++;
 				}
 			}
 
-			else if (isalpha(buff[idx])) {	
+			else if (isalpha(buff[idx])) {
+
+				if (buff[idx] == 'i' && buff[idx+1] == 'f' && !isalnum(buff[idx+3])) {
+					token->type = IF;
+					token->length = 2;
+					break;
+				}
+
+				if (buff[idx] == 'e' && buff[idx+1] == 'l' && buff[idx+2] == 's' && buff[idx+3] == 'e' && !isalnum(buff[idx+4])) {
+					token->type = ELSE;
+					token->length = 4;
+					break;
+				}
+
+				if (buff[idx] == 'w' && buff[idx+1] == 'h' && buff[idx+2] == 'i' && buff[idx+3] == 'l' && buff[idx+4] == 'e' && !isalnum(buff[idx+5])) {
+					token->type = WHILE;
+					token->length = 5;
+					break;
+				}
+
 				if (buff[idx] == 'i' && buff[idx+1] == 'n' && buff[idx+2] == 't' && !isalnum(buff[idx+3])) {
 					token->type = INT;
 					token->length = 3;

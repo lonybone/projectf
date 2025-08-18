@@ -24,6 +24,7 @@ char* lookup[] = {
 	"DQUOTE",
 	"SQUOTE",
 	"NUM",
+	"FLOAT",
 	"IF",
 	"ELSE",
 	"WHILE",
@@ -34,10 +35,10 @@ char* lookup[] = {
 	"STR",
 	"TRUE",
 	"FALSE",
-	"ID"
+	"ID",
 };
 
-char *parseArgs(int argc, char *argv[]) {
+char* parseArgs(int argc, char* argv[]) {
 
 	// Currently only one argument (the about to be compiled file) is accepted
 	// TODO: Add check for custom file extension to ONLY compile files with that extension
@@ -49,9 +50,9 @@ char *parseArgs(int argc, char *argv[]) {
 	return argv[1];
 }
 
-char *readFileToBuffer(char *filepath) {
+char* readFileToBuffer(char* filepath) {
 
-    FILE *file = fopen(filepath, "rb");
+    FILE* file = fopen(filepath, "rb");
     if (file == NULL) {
         perror("Error opening file");
         return NULL;
@@ -61,7 +62,7 @@ char *readFileToBuffer(char *filepath) {
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    char *buffer = (char*)malloc(file_size + 1);
+    char* buffer = (char*)malloc(file_size + 1);
     if (buffer == NULL) {
         fprintf(stderr, "Error allocating memory for file buffer.\n");
         fclose(file);
@@ -82,10 +83,10 @@ char *readFileToBuffer(char *filepath) {
     return buffer;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
 
-	char *filepath = parseArgs(argc, argv);
-	char *buffer = readFileToBuffer(filepath);
+	char* filepath = parseArgs(argc, argv);
+	char* buffer = readFileToBuffer(filepath);
 
 	if (buffer == NULL) {
 		return 1;
@@ -93,14 +94,17 @@ int main(int argc, char *argv[]) {
 
 	initializeLexer(buffer);
 
-	Token *token = getToken();
+	Token* token = getToken();
 
-	while (token->type != E_O_F) {
+	while (token != NULL) {
+		if (token->type == E_O_F) {
+			free(token);
+			break;
+		}
 		printf("%s\t\t\t%.*s\n", lookup[token->type], token->length, token->start);
 		free(token);
 		token = getToken();
 	}
 
-	free(token);
 	free(buffer);
 }

@@ -25,6 +25,7 @@ typedef enum {
 	DQUOTE,
 	SQUOTE,
 	NUM,
+	FLOAT,
 	IF,
 	ELSE,
 	WHILE,
