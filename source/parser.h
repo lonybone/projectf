@@ -4,13 +4,13 @@
 typedef struct Expression Expression;
 
 typedef enum {
-	INT,
-	LONG,
-	LONG_LONG,
-	FLOAT,
-	DOUBLE,
-	CHAR,
-	STR
+	INT_TYPE,
+	LONG_TYPE,
+	LONG_LONG_TYPE,
+	FLOAT_TYPE,
+	DOUBLE_TYPE,
+	CHAR_TYPE,
+	STR_TYPE
 } ValueType;
 
 typedef struct { 
@@ -25,15 +25,6 @@ typedef struct {
 		char* str;
 	} vals;
 } Value;
-
-typedef enum {
-	ADD,
-	SUB,
-	MUL,
-	DIV,
-	EQ,
-	NEQ,
-} OperationType;
 
 typedef struct {
 	char* id;
@@ -50,18 +41,27 @@ typedef struct {
 	Assign* assign;
 } Declaration;
 
+typedef enum {
+	ADD_OP,
+	SUB_OP,
+	MUL_OP,
+	DIV_OP,
+	EQ_OP,
+	NEQ_OP
+} BinOperationType;
+
 typedef struct {
-	OperationType type;
+	BinOperationType type;
 	Expression* left;
 	Expression* right;
 
 } BinOperation;
 
 typedef enum {
-	ASSIGN,
-	BINOP,
-	VALUE,
-	DECLARATION
+	ASSIGN_EXPR,
+	BINOP_EXPR,
+	VALUE_EXPR,
+	DECLARATIO_EXPR
 } ExpressionType;
 
 struct Expression {
