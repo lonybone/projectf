@@ -106,4 +106,3 @@ Token *getToken() {
 	idx += token->length;
 	return token;
 }
-

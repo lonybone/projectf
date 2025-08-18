@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
 	Token *token = getToken();
 
 	while (token->type != E_O_F) {
-		printf("|%.*s", token->length, token->start);;
+		printf("_______________\nType:   %d     \nString: %.*s\n", token->type, token->length, token->start);
 		token = getToken();
 	}
 }
