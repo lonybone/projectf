@@ -54,7 +54,6 @@ int append(DynamicArray *dynamicArray, Statement *statement) {
 
 void freeArray(DynamicArray* dynamicArray) {
 	free(dynamicArray->array);
-	free(dynamicArray);
 };
 
 /*
@@ -64,5 +63,7 @@ int main(int argc, char* argv[]) {
 		append(arr, malloc(sizeof(Statement*)));
 		printf("just added pointer with value: %p\n", arr->array[i]);
 	}
+	freeArray(arr);
+	free(arr);
 }
 */
