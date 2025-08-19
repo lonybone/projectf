@@ -1,9 +1,14 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-typedef struct Expression Expression;
+struct DynamicArray;
+
+typedef struct BlockStmt BlockStmt;
 typedef struct Statement Statement;
+typedef struct Expression Expression;
 typedef struct BinOperation BinOperation;
+typedef struct WhileStmt WhileStmt;
+typedef struct IfStmt IfStmt;
 typedef struct Assignment Assignment;
 typedef struct Declaration Declaration;
 typedef struct Variable Variable;
@@ -40,6 +45,10 @@ typedef enum {
 	STR_TYPE
 } ValueType;
 
+struct BlockStmt {
+	struct DynamicArray* stmts;
+};
+
 struct Statement {
 	StatementType type;
 	union {
@@ -64,6 +73,17 @@ struct BinOperation {
 	Expression* left;
 	Expression* right;
 
+};
+
+struct WhileStmt {
+	Expression* condition;
+	BlockStmt* body;
+};
+
+struct IfStmt {
+	Expression* condition;
+	BlockStmt* trueBody;
+	BlockStmt* falseBody;
 };
 
 struct Assignment {

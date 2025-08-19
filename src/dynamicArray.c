@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
 	DynamicArray* arr = dynamicArray(2);
 	for(int i = 0; i < 10; i++) {
 		append(arr, malloc(sizeof(Statement*)));
-		printf("just added pointer with value: %p\n", arr->array[i]);
+		printf("just added pointer with value: %p\n", get(arr, i));
 	}
 	freeArray(arr);
 	free(arr);

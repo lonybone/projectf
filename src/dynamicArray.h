@@ -1,5 +1,6 @@
 #ifndef DYNAMIC_ARRAY_H
 #define DYNAMIC_ARRAY_H
+
 #include "parser.h"
 
 typedef struct DynamicArray DynamicArray;
