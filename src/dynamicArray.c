@@ -53,9 +53,11 @@ int append(DynamicArray *dynamicArray, Statement *statement) {
 }
 
 void freeArray(DynamicArray* dynamicArray) {
+	for (int i = 0; i < dynamicArray->size; i++) {
+		free(dynamicArray->array[i]);
+	}
 	free(dynamicArray->array);
 };
-
 /*
 int main(int argc, char* argv[]) {
 	DynamicArray* arr = dynamicArray(2);
