@@ -183,7 +183,7 @@ Token* getToken() {
 				while (isalnum(buff[idx + token->length])) {
 					token->length++;
 				}
-			}	
+			}
 			
 			else {
 				fprintf(stderr, "Unexpected Token: %c\n", buff[idx]);

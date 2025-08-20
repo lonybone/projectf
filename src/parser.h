@@ -3,8 +3,8 @@
 
 struct DynamicArray;
 
-typedef struct BlockStmt BlockStmt;
 typedef struct Statement Statement;
+typedef struct BlockStmt BlockStmt;
 typedef struct Expression Expression;
 typedef struct BinOperation BinOperation;
 typedef struct WhileStmt WhileStmt;
@@ -16,6 +16,8 @@ typedef struct Value Value;
 
 typedef enum {
 	EXPRESSION_STMT,
+	WHILE_STMT,
+	IF_STMT,
 	ASSIGN_STMT,
 	DECLARATION_EXPR
 } StatementType;
@@ -45,17 +47,19 @@ typedef enum {
 	STR_TYPE
 } ValueType;
 
-struct BlockStmt {
-	struct DynamicArray* stmts;
-};
-
 struct Statement {
 	StatementType type;
 	union {
+		BlockStmt* blockStmt;
 		Expression* expression;
-		Assignment* assignment;
+		WhileStmt* whileStmt;
+		IfStmt* ifStmt;
 		Declaration* declaration;
 	} as;
+};
+
+struct BlockStmt {
+	struct DynamicArray* stmts;
 };
 
 struct Expression {
@@ -87,12 +91,12 @@ struct IfStmt {
 };
 
 struct Assignment {
-	Variable* var;
-	Expression* value;
+	Variable* variable;
+	Expression* expression;
 };
 
 struct Declaration {
-	char* name;
+	Variable* variable;
 	ValueType type;
 	Expression* initializer;
 };

@@ -3,6 +3,8 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+typedef struct Token Token;
+
 typedef enum {
 	E_O_F,
 	SEMICOLON,
@@ -39,13 +41,13 @@ typedef enum {
 	ID,
 } TokenType;
 
-typedef struct {
+struct Token {
 	TokenType type;
 	const char* start;
 	int length;
-} Token;
+};
 
-void initializeLexer(char *b);
-Token *getToken();
+void initializeLexer(char* b);
+Token* getToken();
 
 #endif
