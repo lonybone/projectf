@@ -16,10 +16,11 @@ typedef struct Value Value;
 
 typedef enum {
 	EXPRESSION_STMT,
+	BLOCK_STMT,
 	WHILE_STMT,
 	IF_STMT,
-	ASSIGN_STMT,
-	DECLARATION_EXPR
+	DECLARATION_STMT,
+	E_O_F_STMT
 } StatementType;
 
 typedef enum {
@@ -50,8 +51,8 @@ typedef enum {
 struct Statement {
 	StatementType type;
 	union {
-		BlockStmt* blockStmt;
 		Expression* expression;
+		BlockStmt* blockStmt;
 		WhileStmt* whileStmt;
 		IfStmt* ifStmt;
 		Declaration* declaration;
@@ -117,5 +118,14 @@ struct Value {
 		char* str;
 	} as;
 };
+
+Expression* parseExpression();
+BlockStmt* parseBlockStmt();
+BinOperation* parseBinOperation();
+WhileStmt* parseWhileStmt();
+IfStmt* parseIfStmt();
+Assignment* parseAssignment();
+Declaration* parseDeclaration();
+Variable* ParseVariable();
 
 #endif

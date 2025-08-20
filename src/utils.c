@@ -82,7 +82,6 @@ Operation insertKeyPair(HashTable *table, char *key, char *value) {
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
-			fprintf(stderr, "Error: Key '%s' already exists\n", key);
 			return ALREADY_EXISTS;
 		}
 		current = current->next;
