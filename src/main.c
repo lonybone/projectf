@@ -165,10 +165,16 @@ void printIfStmt(IfStmt* ifStmt, int indent) {
     printf("Then Branch:\n");
     printBlockStmt(ifStmt->trueBody, indent + 2);
 
-    if (ifStmt->falseBody) {
+    if (ifStmt->type != ONLYIF) {
         printIndent(indent + 1);
+
+	if (ifStmt->type == IF_ELSE) {
         printf("Else Branch:\n");
-        printBlockStmt(ifStmt->falseBody, indent + 2);
+        printBlockStmt(ifStmt->as.ifElse, indent + 2);
+	}
+	else {
+		printIfStmt(ifStmt->as.ifElseIf, indent + 2);
+	}
     }
 }
 

@@ -12,6 +12,7 @@ Statement* parseStatement();
 Expression* parseExpression(int minPrecedence);
 Expression* parsePrimaryExpression();
 BinOperation* parseBinOperation(BinOperationType type, Expression* left, Expression* right);
+UnaryOperation* parseUnaryOperation(TokenType type, Expression* right);
 BlockStmt* parseBlockStmt();
 WhileStmt* parseWhileStmt();
 IfStmt* parseIfStmt();
@@ -24,6 +25,7 @@ void freeStatement(Statement* statement);
 void freeBlockStmt(BlockStmt* block);
 void freeExpression(Expression* expression);
 void freeBinOperation(BinOperation* binOperation);
+void freeUnaryOperation(UnaryOperation* unaryOperation);
 void freeBlockStmt(BlockStmt* blockStmt);
 void freeWhileStmt(WhileStmt* whileStmt);
 void freeIfStmt(IfStmt* ifStmt);
@@ -215,7 +217,7 @@ Expression* parsePrimaryExpression() {
 			return NULL;
 		}
 
-		unaryExpression->as.unop = calloc(1, sizeof(UnaryOperation));
+		unaryExpression->as.unop = parseUnaryOperation(type, right);
 
 		if (unaryExpression->as.unop == NULL) {
 			freeExpression(right);
@@ -224,8 +226,6 @@ Expression* parsePrimaryExpression() {
 		}
 
 		unaryExpression->type = UNARY_EXPR;
-		unaryExpression->as.unop->type = type;
-		unaryExpression->as.unop->right = right;
 
 		return unaryExpression;
 	}
@@ -411,6 +411,18 @@ BinOperation* parseBinOperation(BinOperationType type, Expression* left, Express
 	return binOp;
 }
 
+UnaryOperation* parseUnaryOperation(TokenType type, Expression* right) {
+	UnaryOperation* unaryOperation = calloc(1, sizeof(UnaryOperation));
+
+	if (unaryOperation == NULL) {
+		return NULL;
+	}
+
+	unaryOperation->type = type;
+	unaryOperation->right = right;
+	return unaryOperation;
+}
+
 BlockStmt* parseBlockStmt() {
 	BlockStmt* blockStmt = calloc(1, sizeof(BlockStmt));
 
@@ -510,23 +522,41 @@ IfStmt* parseIfStmt() {
 		return NULL;
 	}
 
+	ifStmt->type = ONLYIF;
+
 	if (peekToken() != NULL && peekToken()->type == ELSE) {
 		advanceToken();
+		ifStmt->type = IF_ELSE;
+
+		if (peekToken() != NULL && peekToken()->type == IF) {
+			advanceToken();
+
+			ifStmt->type = IF_ELSE_IF;
+			ifStmt->as.ifElseIf = parseIfStmt();
+
+			if (ifStmt->as.ifElseIf == NULL) {
+				freeIfStmt(ifStmt);
+				return NULL;
+			}
+
+			return ifStmt;
+		}
 
 		if (peekToken() == NULL || peekToken()->type != LCURL) {
-			fprintf(stderr, "Error: Expected '{' after while condition\n");
+			fprintf(stderr, "Error: Expected '{' after if condition\n");
 			freeIfStmt(ifStmt);
 		}
 
 		advanceToken();
 
-		ifStmt->falseBody = parseBlockStmt();
+		ifStmt->as.ifElse = parseBlockStmt();
 
-		if (ifStmt->falseBody == NULL) {
+		if (ifStmt->as.ifElse == NULL) {
 			freeIfStmt(ifStmt);
 			return NULL;
 		}
 	}
+
 	return ifStmt;
 }
 
@@ -630,6 +660,9 @@ void freeExpression(Expression* expression) {
 		case BINOP_EXPR:
 			freeBinOperation(expression->as.binop);
 			break;
+		case UNARY_EXPR:
+			freeUnaryOperation(expression->as.unop);
+			break;
 		case ASSIGN_EXPR:
 			freeAssignment(expression->as.assignment);
 			break;
@@ -639,6 +672,9 @@ void freeExpression(Expression* expression) {
 		case VALUE_EXPR:
 			freeValue(expression->as.value);
 			break;
+		default:
+			break;
+		
 	}
 	
 	free(expression);
@@ -655,6 +691,16 @@ void freeBinOperation(BinOperation* binOperation) {
 	free(binOperation);
 }
 
+void freeUnaryOperation(UnaryOperation* unaryOperation) {
+
+	if (unaryOperation == NULL) {
+		return;
+	}
+
+	freeExpression(unaryOperation->right);
+	free(unaryOperation);
+}
+
 void freeWhileStmt(WhileStmt* whileStmt) {
 
 	if (whileStmt == NULL) {
@@ -666,16 +712,23 @@ void freeWhileStmt(WhileStmt* whileStmt) {
 	free(whileStmt);
 }
 
-void freeIfStmt(IfStmt* IfStmt) {
+void freeIfStmt(IfStmt* ifStmt) {
 
-	if (IfStmt == NULL) {
+	if (ifStmt == NULL) {
 		return;
 	}
 
-	freeExpression(IfStmt->condition);
-	freeBlockStmt(IfStmt->trueBody);
-	freeBlockStmt(IfStmt->falseBody);
-	free(IfStmt);
+	freeExpression(ifStmt->condition);
+	freeBlockStmt(ifStmt->trueBody);
+
+	if (ifStmt->type == IF_ELSE) {
+		freeBlockStmt(ifStmt->as.ifElse);
+	}
+	else if (ifStmt->type == IF_ELSE_IF) {
+		freeIfStmt(ifStmt->as.ifElseIf);
+	}
+
+	free(ifStmt);
 }
 
 void freeAssignment(Assignment* assignment) {

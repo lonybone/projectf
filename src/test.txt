@@ -2,6 +2,6 @@ x = 5 + 10 * 2
 y = 0
 if !x > 20 {
   y = x - 15
-} else {
+} else if !x {
   y = 1
 }

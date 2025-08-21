@@ -50,6 +50,12 @@ typedef enum {
 } BinOperationType;
 
 typedef enum {
+	ONLYIF,
+	IF_ELSE,
+	IF_ELSE_IF
+} IfStmtOperationType;
+
+typedef enum {
 	NULL_TYPE,
 	INT_TYPE,
 	LONG_TYPE,
@@ -105,9 +111,13 @@ struct WhileStmt {
 };
 
 struct IfStmt {
+	IfStmtOperationType type;
 	Expression* condition;
 	BlockStmt* trueBody;
-	BlockStmt* falseBody;
+	union {
+		BlockStmt* ifElse;
+		IfStmt* ifElseIf;
+	} as;
 };
 
 struct Assignment {
