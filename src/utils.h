@@ -2,9 +2,7 @@
 #define DYNAMIC_ARRAY_H
 
 #include <stdbool.h>
-#include "parser.h"
 
-typedef struct DynamicArray DynamicArray;
 static const int INITIAL_CAPACITY = 16;
 
 typedef struct HashTable HashTable;
@@ -17,16 +15,16 @@ typedef enum {
 	ALLOC_FAIL
 } Operation;
 
-struct DynamicArray {
+typedef struct DynamicArray {
 	int growthFactor;
 	int maxSize;
 	int size;
-	Statement** array;
-};
+	void** array;
+} DynamicArray;
 
 DynamicArray* dynamicArray(int growthFactor);
-Statement* getStmt(DynamicArray* dynamicArray, int idx);
-bool appendStmt(DynamicArray* dynamicArray, Statement* statement);
+void* getStmt(DynamicArray* dynamicArray, int idx);
+bool appendStmt(DynamicArray* dynamicArray, void* statement);
 void freeArray(DynamicArray* dynamicArray);
 
 // function by Dan Bernstein found on http://www.cse.yorku.ca/~oz/hash.html

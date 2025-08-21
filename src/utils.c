@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "utils.h"
-#include "parser.h"
 
 DynamicArray *dynamicArray(int growthFactor) {
 	DynamicArray* dynamicArray = (DynamicArray*)malloc(sizeof(DynamicArray));
@@ -16,7 +15,7 @@ DynamicArray *dynamicArray(int growthFactor) {
 	dynamicArray->growthFactor = growthFactor;
 	dynamicArray->maxSize = INITIAL_CAPACITY; 
 	dynamicArray->size = 0;
-	dynamicArray->array = malloc(INITIAL_CAPACITY * sizeof(Statement*));
+	dynamicArray->array = malloc(INITIAL_CAPACITY * sizeof(void*));
 
 	if (dynamicArray->array == NULL) {
 		fprintf(stderr, "failed to allocate static array in dynamic array");
@@ -27,7 +26,7 @@ DynamicArray *dynamicArray(int growthFactor) {
 	return dynamicArray;
 }
 
-Statement* getStmt(DynamicArray* dynamicArray, int idx) {
+void* getStmt(DynamicArray* dynamicArray, int idx) {
 	if (idx < 0 || idx >= dynamicArray->size) {
 		fprintf(stderr, "index out of range for dynamic Array");
 		return NULL;
@@ -35,13 +34,13 @@ Statement* getStmt(DynamicArray* dynamicArray, int idx) {
 	return dynamicArray->array[idx];
 }
 
-bool appendStmt(DynamicArray *dynamicArray, Statement *statement) {
+bool appendStmt(DynamicArray *dynamicArray, void *statement) {
 	dynamicArray->array[dynamicArray->size++] = statement;
 
 	if (dynamicArray->size == dynamicArray->maxSize) {
 
 		dynamicArray->maxSize *= dynamicArray->growthFactor;
-		Statement** tmp = realloc(dynamicArray->array, dynamicArray->maxSize * sizeof(Statement*));
+		void** tmp = realloc(dynamicArray->array, dynamicArray->maxSize * sizeof(void*));
 
 		if (tmp == NULL) {
 			fprintf(stderr, "failed to allocate static array in dynamic array");
@@ -55,9 +54,6 @@ bool appendStmt(DynamicArray *dynamicArray, Statement *statement) {
 }
 
 void freeArray(DynamicArray* dynamicArray) {
-	for (int i = 0; i < dynamicArray->size; i++) {
-		free(dynamicArray->array[i]);
-	}
 	free(dynamicArray->array);
 	free(dynamicArray);
 };

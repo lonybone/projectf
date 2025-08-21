@@ -24,15 +24,21 @@ typedef enum {
 	ASSIGN,
 	NEQUALS,
 	NOT,
+	STE,
+	ST,
+	GTE,
+	GT,
 	DQUOTE,
 	SQUOTE,
 	NUM,
-	FLOAT,
+	FNUM,
 	IF,
 	ELSE,
 	WHILE,
 	INT,
 	LONG,
+	FLOAT,
+	DOUBLE,
 	BOOL,
 	CHAR,
 	STR,
@@ -47,7 +53,10 @@ struct Token {
 	int length;
 };
 
-void initializeLexer(char* b);
+int initializeLexer(char* b);
+void freeLexer();
 Token* getToken();
+Token* peekToken();
+void advanceToken();
 
 #endif

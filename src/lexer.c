@@ -6,10 +6,22 @@
 
 char* buff;
 int idx;
+Token* currentToken;
 
-void initializeLexer(char* b) {
+int initializeLexer(char* b) {
 	buff = b;
 	idx = 0;
+	currentToken = getToken();
+
+	if (currentToken == NULL) {
+		return 1;
+	}
+
+	return 0;
+}
+
+void freeLexer() {
+	free(currentToken);
 }
 
 Token* getToken() {
@@ -19,6 +31,12 @@ Token* getToken() {
 	}
 
 	Token* token = malloc(sizeof(Token));
+
+	if (token == NULL) {
+		fprintf(stderr, "Error: failed to allocate token in lexer");
+		return NULL;
+	}
+
 	token->start = &buff[idx];
 	token->length = 1;
 
@@ -84,6 +102,25 @@ Token* getToken() {
 				token->type = NOT;
 			}
 			break;
+
+		case '<':
+			if (buff[idx+1] == '=') {
+				token->length++;
+				token->type = STE;
+			}
+			else {
+				token->type = ST;
+			}
+			break;
+		case '>':
+			if (buff[idx+1] == '=') {
+				token->length++;
+				token->type = GTE;
+			}
+			else {
+				token->type = GT;
+			}
+			break;
 		case '"':
 			token->type = DQUOTE;
 			while (buff[idx + token->length] != '"' && buff[idx + token->length] != '\0') {
@@ -101,7 +138,7 @@ Token* getToken() {
 		default:
 
 			if (isdigit(buff[idx])) {
-				token->type = INT;
+				token->type = NUM;
 				bool isFloat = false;
 				while (isdigit(buff[idx + token->length]) || buff[idx + token->length] == '.') {
 					if (buff[idx + token->length] == '.') {
@@ -111,7 +148,7 @@ Token* getToken() {
 							return NULL;
 						}
 						isFloat = true;
-						token->type = FLOAT;
+						token->type = FNUM;
 					}
 					token->length++;
 				}
@@ -119,7 +156,7 @@ Token* getToken() {
 
 			else if (isalpha(buff[idx])) {
 
-				if (buff[idx] == 'i' && buff[idx+1] == 'f' && !isalnum(buff[idx+3])) {
+				if (buff[idx] == 'i' && buff[idx+1] == 'f' && !isalnum(buff[idx+2])) {
 					token->type = IF;
 					token->length = 2;
 					break;
@@ -146,6 +183,18 @@ Token* getToken() {
 				if (buff[idx] == 'l' && buff[idx+1] == 'o' && buff[idx+2] == 'n' && buff[idx+3] == 'g' && !isalnum(buff[idx+4])) {
 					token->type = LONG;
 					token->length = 4;
+					break;
+				}
+				
+				if (buff[idx] == 'f' && buff[idx+1] == 'l' && buff[idx+2] == 'o' && buff[idx+3] == 'a' && buff[idx+4] == 't' && !isalnum(buff[idx+5])) {
+					token->type = FLOAT;
+					token->length = 5;
+					break;
+				}
+
+				if (buff[idx] == 'd' && buff[idx+1] == 'o' && buff[idx+2] == 'u' && buff[idx+3] == 'b' && buff[idx+4] == 'l' && buff[idx+5] == 'e' && !isalnum(buff[idx+6])) {
+					token->type = DOUBLE;
+					token->length = 6;
 					break;
 				}
 
@@ -192,7 +241,21 @@ Token* getToken() {
 			}
 	}
 
-	// Prepare for next Token
-	idx += token->length;
 	return token;
+}
+
+Token* peekToken() {
+	return currentToken;
+}
+
+void advanceToken() {
+
+	if (currentToken == NULL) {
+		return;
+	}
+
+	idx += currentToken->length;
+
+	free(currentToken);
+	currentToken = getToken();
 }

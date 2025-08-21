@@ -1,12 +1,16 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include "lexer.h"
+#include "utils.h"
+
 struct DynamicArray;
 
 typedef struct Statement Statement;
 typedef struct BlockStmt BlockStmt;
 typedef struct Expression Expression;
 typedef struct BinOperation BinOperation;
+typedef struct UnaryOperation UnaryOperation;
 typedef struct WhileStmt WhileStmt;
 typedef struct IfStmt IfStmt;
 typedef struct Assignment Assignment;
@@ -26,7 +30,9 @@ typedef enum {
 typedef enum {
 	ASSIGN_EXPR,
 	BINOP_EXPR,
-	VALUE_EXPR,
+	UNARY_EXPR,
+	VARIABLE_EXPR,
+	VALUE_EXPR
 } ExpressionType;
 
 typedef enum {
@@ -34,11 +40,17 @@ typedef enum {
 	SUB_OP,
 	MUL_OP,
 	DIV_OP,
+	MOD_OP,
+	ST_OP,
+	STE_OP,
+	GT_OP,
+	GTE_OP,
 	EQ_OP,
 	NEQ_OP
 } BinOperationType;
 
 typedef enum {
+	NULL_TYPE,
 	INT_TYPE,
 	LONG_TYPE,
 	LONG_LONG_TYPE,
@@ -67,6 +79,7 @@ struct Expression {
 	ExpressionType type;
 	union {
 		BinOperation* binop;
+		UnaryOperation* unop;
 		Assignment* assignment;
 		Variable* variable;
 		Value* value;
@@ -76,6 +89,12 @@ struct Expression {
 struct BinOperation {
 	BinOperationType type;
 	Expression* left;
+	Expression* right;
+
+};
+
+struct UnaryOperation {
+	TokenType type;
 	Expression* right;
 
 };
@@ -107,7 +126,7 @@ struct Variable {
 };
 
 struct Value {
-	ValueType* type;
+	ValueType type;
 	union {
 		int i_16;
 		long i_32;
@@ -119,13 +138,9 @@ struct Value {
 	} as;
 };
 
-Expression* parseExpression();
-BlockStmt* parseBlockStmt();
-BinOperation* parseBinOperation();
-WhileStmt* parseWhileStmt();
-IfStmt* parseIfStmt();
-Assignment* parseAssignment();
-Declaration* parseDeclaration();
-Variable* ParseVariable();
+int initializeParser();
+struct DynamicArray* parseBuffer();
+void freeParser();
+void freeStatement(Statement* statement);
 
 #endif
