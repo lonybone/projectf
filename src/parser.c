@@ -543,8 +543,9 @@ IfStmt* parseIfStmt() {
 		}
 
 		if (peekToken() == NULL || peekToken()->type != LCURL) {
-			fprintf(stderr, "Error: Expected '{' after if condition\n");
+			fprintf(stderr, "Error: Expected '{' after else\n");
 			freeIfStmt(ifStmt);
+			return NULL;
 		}
 
 		advanceToken();
