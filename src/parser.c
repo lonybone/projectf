@@ -2,22 +2,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include "parser.h"
-#include "lexer.h"
+#include "parser.h"
 #include "utils.h"
 
-DynamicArray* statements;
-HashTable* identifiers;
-
-Statement* parseStatement();
-Expression* parseExpression(int minPrecedence);
-Expression* parsePrimaryExpression();
+Statement* parseStatement(Parser* parser);
+Expression* parseExpression(Parser* parser, int minPrecedence);
+Expression* parsePrimaryExpression(Parser* parser);
 BinOperation* parseBinOperation(BinOperationType type, Expression* left, Expression* right);
 UnaryOperation* parseUnaryOperation(TokenType type, Expression* right);
-BlockStmt* parseBlockStmt();
-WhileStmt* parseWhileStmt();
-IfStmt* parseIfStmt();
+BlockStmt* parseBlockStmt(Parser* parser);
+WhileStmt* parseWhileStmt(Parser* parser);
+IfStmt* parseIfStmt(Parser* parser);
 Assignment* parseAssignment(Variable* variable, Expression* expression);
-Declaration* parseDeclaration();
+Declaration* parseDeclaration(); // not implemented
 Value* parseValue(Token* token);
 Variable* parseVariable(Token* token);
 
@@ -34,24 +31,42 @@ void freeDeclaration(Declaration* declaration);
 void freeVariable(Variable* variable);
 void freeValue(Value* value);
 
-int initializeParser() {
-	// array for holding all statements one level beneath root
-	statements = dynamicArray(2);
-	identifiers = hashTable(256);
+Parser* initializeParser(Lexer* lexer) {
+	if (lexer == NULL) {
+		return NULL;
+	}
+
+	Parser* parser = calloc(1, sizeof(Parser));
+
+	if (parser == NULL) {
+		return NULL;
+	}
+	
+	DynamicArray* statements = dynamicArray(2);
+	HashTable* identifiers = hashTable(256);
 
 	if (statements == NULL || identifiers == NULL) {
 		freeArray(statements);
 		freeTable(identifiers);
-		return 1;
+		freeParser(parser);
+		return NULL;
 	}
 
-	return 0;
+	parser->lexer = lexer;
+	parser->statements = statements;
+	parser->identifiers = identifiers;
+
+	return parser;
 }
 
-DynamicArray* parseBuffer() {
+DynamicArray* parseBuffer(Parser* parser) {
+
+	if (parser == NULL) {
+		return NULL;
+	}
 
 	for (;;) {
-		Statement* statement = parseStatement();
+		Statement* statement = parseStatement(parser);
 
 		if (statement == NULL) {
 			return NULL;
@@ -62,10 +77,10 @@ DynamicArray* parseBuffer() {
 			break;
 		}
 
-		appendStmt(statements, statement);
+		appendStmt(parser->statements, statement);
 	}
 
-	return statements;
+	return parser->statements;
 }
 
 static int getBinOpPrecedence(TokenType type) {
@@ -96,7 +111,7 @@ char* parseToken(Token* token) {
 	char* tokenString = malloc(token->length+1);
 
 	if (tokenString == NULL) {
-		fprintf(stderr, "failed to allocate memory for tokenstring\n");
+		fprintf(stderr, "Error: Failed to allocate memory for tokenstring\n");
 		return NULL;
 	}
 
@@ -106,9 +121,13 @@ char* parseToken(Token* token) {
 	return tokenString;
 }
 
-Statement* parseStatement() {
+Statement* parseStatement(Parser* parser) {
 
-	Token* token = peekToken();
+	if (parser == NULL) {
+		return NULL;
+	}
+
+	Token* token = peekToken(parser->lexer);
 
 	if (token == NULL) {
 		fprintf(stderr, "Error: received no token in parser\n");
@@ -129,9 +148,9 @@ Statement* parseStatement() {
 	switch (token->type) {
 
 		case IF:
-			advanceToken();
+			advanceToken(parser->lexer);
 			statement->type = IF_STMT;
-			statement->as.ifStmt = parseIfStmt();
+			statement->as.ifStmt = parseIfStmt(parser);
 
 			if (statement->as.ifStmt == NULL) {
 				goto error;
@@ -140,9 +159,9 @@ Statement* parseStatement() {
 			break;
 
 		case WHILE:
-			advanceToken();
+			advanceToken(parser->lexer);
 			statement->type = WHILE_STMT;
-			statement->as.whileStmt = parseWhileStmt();
+			statement->as.whileStmt = parseWhileStmt(parser);
 
 			if (statement->as.whileStmt == NULL) {
 				goto error;
@@ -151,9 +170,9 @@ Statement* parseStatement() {
 			break;
 			
 		case LCURL:
-			advanceToken();
+			advanceToken(parser->lexer);
 			statement->type = BLOCK_STMT;
-			statement->as.blockStmt = parseBlockStmt();
+			statement->as.blockStmt = parseBlockStmt(parser);
 
 			if (statement->as.blockStmt == NULL) {
 				goto error;
@@ -166,7 +185,7 @@ Statement* parseStatement() {
 		case FNUM:
 		case LPAREN:
 			statement->type = EXPRESSION_STMT;
-			Expression* expression = parseExpression(0);
+			Expression* expression = parseExpression(parser, 0);
 			statement->as.expression = expression;
 
 			if (expression == NULL) {
@@ -185,26 +204,31 @@ Statement* parseStatement() {
 	return statement;
 
 error:
-	fprintf(stderr, "Error: failed to parse Statement\n");
+	fprintf(stderr, "Error: Failed to parse Statement\n");
 	freeStatement(statement);
 	return NULL;
 
 }
 
-Expression* parsePrimaryExpression() {
-	Token* token = peekToken();
+Expression* parsePrimaryExpression(Parser* parser) {
+
+	if (parser == NULL) {
+		return NULL;
+	}
+
+	Token* token = peekToken(parser->lexer);
 
 	if (token == NULL) {
-		fprintf(stderr, "Error: received invalid token\n");
+		fprintf(stderr, "Error: Received invalid token\n");
 		return NULL;
 	}
 
 	if (token->type == NOT || token->type == MINUS) {
 
 		TokenType type = token->type;
-		advanceToken();
+		advanceToken(parser->lexer);
 
-		Expression* right = parsePrimaryExpression();
+		Expression* right = parsePrimaryExpression(parser);
 
 		if (right == NULL) {
 			return NULL;
@@ -243,7 +267,7 @@ Expression* parsePrimaryExpression() {
 				goto error;
 			}
 
-			advanceToken();
+			advanceToken(parser->lexer);
 			break;
 
 		case ID:
@@ -255,26 +279,26 @@ Expression* parsePrimaryExpression() {
 				goto error;
 			}
 
-			advanceToken();
+			advanceToken(parser->lexer);
 			break;
 		case LPAREN:
-			advanceToken();
+			advanceToken(parser->lexer);
 
-			expression = parseExpression(0);
+			expression = parseExpression(parser, 0);
 
 			if (expression == NULL) {
 				return NULL;
 			}
 
-			if (peekToken() == NULL || peekToken()->type != RPAREN) {
+			if (peekToken(parser->lexer) == NULL || peekToken(parser->lexer)->type != RPAREN) {
 				fprintf(stderr, "Error: Expected token ')'.\n");
 				return NULL;
 			}
 
-			advanceToken();
+			advanceToken(parser->lexer);
 			break;
         	default:
-			fprintf(stderr, "Error: Unexpected token in primary expression.\n");
+			fprintf(stderr, "Error: Unexpected token type %d in primary expression.\n", peekToken(parser->lexer)->type);
 			goto error;
 	}
 
@@ -285,16 +309,21 @@ error:
 	return NULL;
 }
 
-Expression* parseExpression(int minPrecedence) {
-	Expression* leftExpression = parsePrimaryExpression();
+Expression* parseExpression(Parser* parser, int minPrecedence) {
+
+	if (parser == NULL) {
+		return NULL;
+	}
+
+	Expression* leftExpression = parsePrimaryExpression(parser);
 
 	if (leftExpression == NULL) {
-		fprintf(stderr, "Error: failed to allocate expression in parser\n");
+		fprintf(stderr, "Error: Failed to allocate expression in parser\n");
 		return NULL;
 	}
 
 	while (1) {
-		Token* token = peekToken();
+		Token* token = peekToken(parser->lexer);
 
 		if (token == NULL || token->type == E_O_F) {
 			break;
@@ -308,10 +337,10 @@ Expression* parseExpression(int minPrecedence) {
 
 		TokenType type = token->type;
 
-		advanceToken();
+		advanceToken(parser->lexer);
 
 		int nextMinPrecedence = (type == ASSIGN) ? precedence : precedence + 1;
-		Expression* rightExpression = parseExpression(nextMinPrecedence);
+		Expression* rightExpression = parseExpression(parser, nextMinPrecedence);
 
 		if (rightExpression == NULL) {
 			freeExpression(leftExpression);
@@ -321,7 +350,7 @@ Expression* parseExpression(int minPrecedence) {
 		Expression* newLeftExpression = calloc(1, sizeof(Expression));
 
 		if (newLeftExpression == NULL) {
-			fprintf(stderr, "Error: failed to allocate expression in parser\n");
+			fprintf(stderr, "Error: Failed to allocate expression in parser\n");
 			freeExpression(leftExpression);
 			freeExpression(rightExpression);
 			return NULL;
@@ -338,6 +367,12 @@ Expression* parseExpression(int minPrecedence) {
 			newLeftExpression->type = ASSIGN_EXPR;
 			newLeftExpression->as.assignment = parseAssignment(leftExpression->as.variable, rightExpression);
 
+			if (newLeftExpression->as.assignment == NULL) {
+				freeExpression(leftExpression);
+				freeExpression(rightExpression);
+				freeExpression(newLeftExpression);
+				return NULL;
+			}
 		}
 
 		else {
@@ -423,7 +458,12 @@ UnaryOperation* parseUnaryOperation(TokenType type, Expression* right) {
 	return unaryOperation;
 }
 
-BlockStmt* parseBlockStmt() {
+BlockStmt* parseBlockStmt(Parser* parser) {
+
+	if (parser == NULL) {
+		return NULL;
+	}
+
 	BlockStmt* blockStmt = calloc(1, sizeof(BlockStmt));
 
 	if (blockStmt == NULL) {
@@ -437,9 +477,9 @@ BlockStmt* parseBlockStmt() {
 		return NULL;
 	}
 
-	while (peekToken() != NULL && peekToken()->type != RCURL) {
+	while (peekToken(parser->lexer) != NULL && peekToken(parser->lexer)->type != RCURL) {
 
-		Statement* statement = parseStatement();
+		Statement* statement = parseStatement(parser);
 
 		if (statement == NULL) {
 			freeBlockStmt(blockStmt);
@@ -449,39 +489,44 @@ BlockStmt* parseBlockStmt() {
 		appendStmt(blockStmt->stmts, statement);
 	}
 
-	if (peekToken() == NULL || peekToken()->type != RCURL) {
+	if (peekToken(parser->lexer) == NULL || peekToken(parser->lexer)->type != RCURL) {
 		fprintf(stderr, "Error: Expected '}'\n");
 		freeBlockStmt(blockStmt);
 		return NULL;
 	}
 
-	advanceToken();
+	advanceToken(parser->lexer);
 	return blockStmt;
 }
 
-WhileStmt* parseWhileStmt() {
+WhileStmt* parseWhileStmt(Parser* parser) {
+
+	if (parser == NULL) {
+		return NULL;
+	}
+
 	WhileStmt* whileStmt = calloc(1, sizeof(WhileStmt));
 
 	if (whileStmt == NULL) {
 		return NULL;
 	}
 
-	whileStmt->condition = parseExpression(0);
+	whileStmt->condition = parseExpression(parser, 0);
 	
 	if (whileStmt->condition == NULL) {
 		freeWhileStmt(whileStmt);
 		return NULL;
 	}
 
-	if (peekToken() == NULL || peekToken()->type != LCURL) {
+	if (peekToken(parser->lexer) == NULL || peekToken(parser->lexer)->type != LCURL) {
 		fprintf(stderr, "Error: Expected '{' after while condition\n");
 		freeWhileStmt(whileStmt);
 		return NULL;
 	}
 
-	advanceToken();
+	advanceToken(parser->lexer);
 
-	whileStmt->body = parseBlockStmt();
+	whileStmt->body = parseBlockStmt(parser);
 
 	if (whileStmt->body == NULL) {
 		freeWhileStmt(whileStmt);
@@ -492,30 +537,35 @@ WhileStmt* parseWhileStmt() {
 
 }
 
-IfStmt* parseIfStmt() {
+IfStmt* parseIfStmt(Parser* parser) {
+
+	if (parser == NULL) {
+		return NULL;
+	}
+
 	IfStmt* ifStmt = calloc(1, sizeof(IfStmt));
 
 	if (ifStmt == NULL) {
 		return NULL;
 	}
 
-	ifStmt->condition = parseExpression(0);
+	ifStmt->condition = parseExpression(parser, 0);
 	
 	if (ifStmt->condition == NULL) {
 		freeIfStmt(ifStmt);
 		return NULL;
 	}
 
-	if (peekToken() == NULL || peekToken()->type != LCURL) {
+	if (peekToken(parser->lexer) == NULL || peekToken(parser->lexer)->type != LCURL) {
 		fprintf(stderr, "Error: Expected '{' after if condition\n");
-		fprintf(stderr, "token type was %d\n", peekToken()->type);
+		fprintf(stderr, "token type was %d\n", peekToken(parser->lexer)->type);
 		freeIfStmt(ifStmt);
 		return NULL;
 	}
 
-	advanceToken();
+	advanceToken(parser->lexer);
 
-	ifStmt->trueBody = parseBlockStmt();
+	ifStmt->trueBody = parseBlockStmt(parser);
 
 	if (ifStmt->trueBody == NULL) {
 		freeIfStmt(ifStmt);
@@ -524,15 +574,15 @@ IfStmt* parseIfStmt() {
 
 	ifStmt->type = ONLYIF;
 
-	if (peekToken() != NULL && peekToken()->type == ELSE) {
-		advanceToken();
+	if (peekToken(parser->lexer) != NULL && peekToken(parser->lexer)->type == ELSE) {
+		advanceToken(parser->lexer);
 		ifStmt->type = IF_ELSE;
 
-		if (peekToken() != NULL && peekToken()->type == IF) {
-			advanceToken();
+		if (peekToken(parser->lexer) != NULL && peekToken(parser->lexer)->type == IF) {
+			advanceToken(parser->lexer);
 
 			ifStmt->type = IF_ELSE_IF;
-			ifStmt->as.ifElseIf = parseIfStmt();
+			ifStmt->as.ifElseIf = parseIfStmt(parser);
 
 			if (ifStmt->as.ifElseIf == NULL) {
 				freeIfStmt(ifStmt);
@@ -542,15 +592,15 @@ IfStmt* parseIfStmt() {
 			return ifStmt;
 		}
 
-		if (peekToken() == NULL || peekToken()->type != LCURL) {
+		if (peekToken(parser->lexer) == NULL || peekToken(parser->lexer)->type != LCURL) {
 			fprintf(stderr, "Error: Expected '{' after else\n");
 			freeIfStmt(ifStmt);
 			return NULL;
 		}
 
-		advanceToken();
+		advanceToken(parser->lexer);
 
-		ifStmt->as.ifElse = parseBlockStmt();
+		ifStmt->as.ifElse = parseBlockStmt(parser);
 
 		if (ifStmt->as.ifElse == NULL) {
 			freeIfStmt(ifStmt);
@@ -585,6 +635,7 @@ Variable* parseVariable(Token* token) {
 	
 	if (variable->id == NULL) {
 		freeVariable(variable);
+		return NULL;
 	}
 
 	return variable;
@@ -776,7 +827,10 @@ void freeValue(Value* value) {
 	free(value);
 }
 
-void freeParser() {
-	freeArray(statements);
-	freeTable(identifiers);
+void freeParser(Parser* parser) {
+	if (parser == NULL) {
+		return;
+	}
+	freeArray(parser->statements);
+	freeTable(parser->identifiers);
 }

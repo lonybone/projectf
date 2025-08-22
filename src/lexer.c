@@ -4,43 +4,56 @@
 #include <ctype.h>
 #include <stdbool.h>
 
-char* buff;
-int idx;
-Token* currentToken;
+Lexer* initializeLexer(char* b) {
+	Lexer* lexer = calloc(1, sizeof(Lexer));
 
-int initializeLexer(char* b) {
-	buff = b;
-	idx = 0;
-	currentToken = getToken();
-
-	if (currentToken == NULL) {
-		return 1;
+	if (lexer == NULL) {
+		return NULL;
 	}
 
-	return 0;
+	lexer->buff= b;
+	lexer->idx = 0;
+	lexer->currentToken = getToken(lexer);
+
+	if (lexer->currentToken == NULL) {
+		freeLexer(lexer);
+		return NULL;
+	}
+
+	return lexer;
 }
 
-void freeLexer() {
-	free(currentToken);
+void freeLexer(Lexer* lexer) {
+	if (lexer == NULL) {
+		return;
+	}
+	free(lexer->currentToken);
+	free(lexer);
 }
 
-Token* getToken() {
+Token* getToken(Lexer* lexer) {
 
-	while (buff[idx] == ' ' || buff[idx] == '\n' || buff[idx] == '\t' || buff[idx] == ' ' || buff[idx] == '\r') {
-		idx++;
+	if (lexer == NULL) {
+		return NULL;
+	}
+
+	char* buff = lexer->buff;
+
+	while (buff[lexer->idx] == ' ' || buff[lexer->idx] == '\n' || buff[lexer->idx] == '\t' || buff[lexer->idx] == '\r') {
+		lexer->idx++;
 	}
 
 	Token* token = malloc(sizeof(Token));
 
 	if (token == NULL) {
-		fprintf(stderr, "Error: failed to allocate token in lexer");
+		fprintf(stderr, "Error: Failed to allocate token in lexer");
 		return NULL;
 	}
 
-	token->start = &buff[idx];
+	token->start = &buff[lexer->idx];
 	token->length = 1;
 
-	switch (buff[idx]) {
+	switch (buff[lexer->idx]) {
 
 		case '\0':
 			token->type = E_O_F;
@@ -58,10 +71,10 @@ Token* getToken() {
 			token->type = RCURL;
 			break;
 		case '[':
-			token->type = RSQUR;
+			token->type = LSQUR;
 			break;
 		case ']':
-			token->type = LSQUR;
+			token->type = RSQUR;
 			break;
 		case '(':
 			token->type = LPAREN;
@@ -85,7 +98,7 @@ Token* getToken() {
 			token->type = DIV;
 			break;
 		case '=':
-			if (buff[idx+1] == '=') {
+			if (buff[lexer->idx+1] == '=') {
 				token->length++;
 				token->type = EQUALS;
 			}
@@ -94,7 +107,7 @@ Token* getToken() {
 			}
 			break;
 		case '!':
-			if (buff[idx+1] == '=') {
+			if (buff[lexer->idx+1] == '=') {
 				token->length++;
 				token->type = NEQUALS;
 			}
@@ -104,7 +117,7 @@ Token* getToken() {
 			break;
 
 		case '<':
-			if (buff[idx+1] == '=') {
+			if (buff[lexer->idx+1] == '=') {
 				token->length++;
 				token->type = STE;
 			}
@@ -113,7 +126,7 @@ Token* getToken() {
 			}
 			break;
 		case '>':
-			if (buff[idx+1] == '=') {
+			if (buff[lexer->idx+1] == '=') {
 				token->length++;
 				token->type = GTE;
 			}
@@ -123,25 +136,25 @@ Token* getToken() {
 			break;
 		case '"':
 			token->type = DQUOTE;
-			while (buff[idx + token->length] != '"' && buff[idx + token->length] != '\0') {
+			while (buff[lexer->idx + token->length] != '"' && buff[lexer->idx + token->length] != '\0') {
 				token->length++;
 			}
 			token->length++; 
 			break;
 		case '\'':
 			token->type = SQUOTE;
-			while (buff[idx + token->length] != '\'' && buff[idx + token->length] != '\0') {
+			while (buff[lexer->idx + token->length] != '\'' && buff[lexer->idx + token->length] != '\0') {
 				token->length++;
 			}
 			token->length++;
 			break;
 		default:
 
-			if (isdigit(buff[idx])) {
+			if (isdigit(buff[lexer->idx])) {
 				token->type = NUM;
 				bool isFloat = false;
-				while (isdigit(buff[idx + token->length]) || buff[idx + token->length] == '.') {
-					if (buff[idx + token->length] == '.') {
+				while (isdigit(buff[lexer->idx + token->length]) || buff[lexer->idx + token->length] == '.') {
+					if (buff[lexer->idx + token->length] == '.') {
 						if (isFloat) {
 							fprintf(stderr, "INVALID NUMBER TOKEN WITH MORE THAN ONE FLOAT IDENTIFIER\n");
 							free(token);
@@ -154,88 +167,88 @@ Token* getToken() {
 				}
 			}
 
-			else if (isalpha(buff[idx])) {
+			else if (isalpha(buff[lexer->idx])) {
 
-				if (buff[idx] == 'i' && buff[idx+1] == 'f' && !isalnum(buff[idx+2])) {
+				if (buff[lexer->idx] == 'i' && buff[lexer->idx+1] == 'f' && !isalnum(buff[lexer->idx+2])) {
 					token->type = IF;
 					token->length = 2;
 					break;
 				}
 
-				if (buff[idx] == 'e' && buff[idx+1] == 'l' && buff[idx+2] == 's' && buff[idx+3] == 'e' && !isalnum(buff[idx+4])) {
+				if (buff[lexer->idx] == 'e' && buff[lexer->idx+1] == 'l' && buff[lexer->idx+2] == 's' && buff[lexer->idx+3] == 'e' && !isalnum(buff[lexer->idx+4])) {
 					token->type = ELSE;
 					token->length = 4;
 					break;
 				}
 
-				if (buff[idx] == 'w' && buff[idx+1] == 'h' && buff[idx+2] == 'i' && buff[idx+3] == 'l' && buff[idx+4] == 'e' && !isalnum(buff[idx+5])) {
+				if (buff[lexer->idx] == 'w' && buff[lexer->idx+1] == 'h' && buff[lexer->idx+2] == 'i' && buff[lexer->idx+3] == 'l' && buff[lexer->idx+4] == 'e' && !isalnum(buff[lexer->idx+5])) {
 					token->type = WHILE;
 					token->length = 5;
 					break;
 				}
 
-				if (buff[idx] == 'i' && buff[idx+1] == 'n' && buff[idx+2] == 't' && !isalnum(buff[idx+3])) {
+				if (buff[lexer->idx] == 'i' && buff[lexer->idx+1] == 'n' && buff[lexer->idx+2] == 't' && !isalnum(buff[lexer->idx+3])) {
 					token->type = INT;
 					token->length = 3;
 					break;
 				}
 
-				if (buff[idx] == 'l' && buff[idx+1] == 'o' && buff[idx+2] == 'n' && buff[idx+3] == 'g' && !isalnum(buff[idx+4])) {
+				if (buff[lexer->idx] == 'l' && buff[lexer->idx+1] == 'o' && buff[lexer->idx+2] == 'n' && buff[lexer->idx+3] == 'g' && !isalnum(buff[lexer->idx+4])) {
 					token->type = LONG;
 					token->length = 4;
 					break;
 				}
 				
-				if (buff[idx] == 'f' && buff[idx+1] == 'l' && buff[idx+2] == 'o' && buff[idx+3] == 'a' && buff[idx+4] == 't' && !isalnum(buff[idx+5])) {
+				if (buff[lexer->idx] == 'f' && buff[lexer->idx+1] == 'l' && buff[lexer->idx+2] == 'o' && buff[lexer->idx+3] == 'a' && buff[lexer->idx+4] == 't' && !isalnum(buff[lexer->idx+5])) {
 					token->type = FLOAT;
 					token->length = 5;
 					break;
 				}
 
-				if (buff[idx] == 'd' && buff[idx+1] == 'o' && buff[idx+2] == 'u' && buff[idx+3] == 'b' && buff[idx+4] == 'l' && buff[idx+5] == 'e' && !isalnum(buff[idx+6])) {
+				if (buff[lexer->idx] == 'd' && buff[lexer->idx+1] == 'o' && buff[lexer->idx+2] == 'u' && buff[lexer->idx+3] == 'b' && buff[lexer->idx+4] == 'l' && buff[lexer->idx+5] == 'e' && !isalnum(buff[lexer->idx+6])) {
 					token->type = DOUBLE;
 					token->length = 6;
 					break;
 				}
 
-				if (buff[idx] == 'b' && buff[idx+1] == 'o' && buff[idx+2] == 'o' && buff[idx+3] == 'l' && !isalnum(buff[idx+4])) {
+				if (buff[lexer->idx] == 'b' && buff[lexer->idx+1] == 'o' && buff[lexer->idx+2] == 'o' && buff[lexer->idx+3] == 'l' && !isalnum(buff[lexer->idx+4])) {
 					token->type = BOOL;
 					token->length = 4;
 					break;
 				}
 
-				if (buff[idx] == 'c' && buff[idx+1] == 'h' && buff[idx+2] == 'a' && buff[idx+3] == 'r' && !isalnum(buff[idx+4])) {
+				if (buff[lexer->idx] == 'c' && buff[lexer->idx+1] == 'h' && buff[lexer->idx+2] == 'a' && buff[lexer->idx+3] == 'r' && !isalnum(buff[lexer->idx+4])) {
 					token->type = CHAR;
 					token->length = 4;
 					break;
 				}
 
-				if (buff[idx] == 's' && buff[idx+1] == 't' && buff[idx+2] == 'r' && !isalnum(buff[idx+3])) {
+				if (buff[lexer->idx] == 's' && buff[lexer->idx+1] == 't' && buff[lexer->idx+2] == 'r' && !isalnum(buff[lexer->idx+3])) {
 					token->type = STR;
 					token->length = 3;
 					break;
 				}
 
-				if (buff[idx] == 't' && buff[idx+1] == 'r' && buff[idx+2] == 'u' && buff[idx+3] == 'e' && !isalnum(buff[idx+4])) {
+				if (buff[lexer->idx] == 't' && buff[lexer->idx+1] == 'r' && buff[lexer->idx+2] == 'u' && buff[lexer->idx+3] == 'e' && !isalnum(buff[lexer->idx+4])) {
 					token->type = TRUE;
 					token->length = 4;
 					break;
 				}
 
-				if (buff[idx] == 'f' && buff[idx+1] == 'a' && buff[idx+2] == 'l' && buff[idx+3] == 's' && buff[idx+4] == 'e' && !isalnum(buff[idx+5])) {
+				if (buff[lexer->idx] == 'f' && buff[lexer->idx+1] == 'a' && buff[lexer->idx+2] == 'l' && buff[lexer->idx+3] == 's' && buff[lexer->idx+4] == 'e' && !isalnum(buff[lexer->idx+5])) {
 					token->type = FALSE;
 					token->length = 5;
 					break;
 				}
 
 				token->type = ID;
-				while (isalnum(buff[idx + token->length])) {
+				while (isalnum(buff[lexer->idx + token->length])) {
 					token->length++;
 				}
 			}
 			
 			else {
-				fprintf(stderr, "Unexpected Token: %c\n", buff[idx]);
+				fprintf(stderr, "Unexpected Token: %c\n", buff[lexer->idx]);
 				free(token);
 				return NULL;
 			}
@@ -244,18 +257,25 @@ Token* getToken() {
 	return token;
 }
 
-Token* peekToken() {
-	return currentToken;
+Token* peekToken(Lexer* lexer) {
+	if (lexer == NULL) {
+		return NULL;
+	}
+	return lexer->currentToken;
 }
 
-void advanceToken() {
+void advanceToken(Lexer* lexer) {
 
-	if (currentToken == NULL) {
+	if (lexer == NULL) {
 		return;
 	}
 
-	idx += currentToken->length;
+	if (lexer->currentToken == NULL) {
+		return;
+	}
 
-	free(currentToken);
-	currentToken = getToken();
+	lexer->idx += lexer->currentToken->length;
+
+	free(lexer->currentToken);
+	lexer->currentToken = getToken(lexer);
 }

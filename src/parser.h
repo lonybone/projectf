@@ -6,6 +6,7 @@
 
 struct DynamicArray;
 
+typedef struct Parser Parser;
 typedef struct Statement Statement;
 typedef struct BlockStmt BlockStmt;
 typedef struct Expression Expression;
@@ -65,6 +66,12 @@ typedef enum {
 	CHAR_TYPE,
 	STR_TYPE
 } ValueType;
+
+struct Parser {
+	Lexer* lexer;
+	DynamicArray* statements;
+	HashTable* identifiers;
+};
 
 struct Statement {
 	StatementType type;
@@ -148,9 +155,9 @@ struct Value {
 	} as;
 };
 
-int initializeParser();
-struct DynamicArray* parseBuffer();
-void freeParser();
+Parser* initializeParser(Lexer* lexer);
+DynamicArray* parseBuffer(Parser* parser);
+void freeParser(Parser* parser);
 void freeStatement(Statement* statement);
 
 #endif

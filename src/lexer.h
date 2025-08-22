@@ -3,6 +3,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+typedef struct Lexer Lexer;
 typedef struct Token Token;
 
 typedef enum {
@@ -47,16 +48,22 @@ typedef enum {
 	ID,
 } TokenType;
 
+struct Lexer {
+	char* buff;
+	int idx;
+	Token* currentToken;
+};
+
 struct Token {
 	TokenType type;
 	const char* start;
 	int length;
 };
 
-int initializeLexer(char* b);
-void freeLexer();
-Token* getToken();
-Token* peekToken();
-void advanceToken();
+Lexer* initializeLexer(char* b);
+void freeLexer(Lexer* lexer);
+Token* getToken(Lexer* lexer);
+Token* peekToken(Lexer* lexer);
+void advanceToken(Lexer* lexer);
 
 #endif
