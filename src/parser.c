@@ -373,6 +373,8 @@ Expression* parseExpression(Parser* parser, int minPrecedence) {
 				freeExpression(newLeftExpression);
 				return NULL;
 			}
+
+			free(leftExpression);
 		}
 
 		else {
