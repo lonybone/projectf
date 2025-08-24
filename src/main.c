@@ -100,8 +100,16 @@ void printVariable(Variable* var, int indent) {
 void printValue(Value* val, int indent) {
     if (!val) return;
     printIndent(indent);
-    // This assumes a simple Value struct; expand as needed
-    printf("Value: %ld\n", val->as.i_32); // Example for an integer value
+    switch (val->type) {
+	case LONG_TYPE:
+		printf("Value: %ld\n", val->as.i_32);
+		break;
+	case DOUBLE_TYPE: 
+		printf("Value: %f\n", val->as.df);
+		break;
+	default:
+		printf("Unknown Value/Not Implemented\n");
+    }
 }
 
 void printAssignment(Assignment* assign, int indent) {
@@ -132,8 +140,12 @@ void printExpression(Expression* expr, int indent) {
     if (expr == NULL) {
 		printIndent(indent);
 		printf("(Null Expression)\n");
+		return;
 	}
     switch (expr->type) {
+	case EXPR_WRAPPER_EXPR:
+	    printExpression(expr->as.expWrap, indent);
+	    break;
         case BINOP_EXPR:
             printBinOperation(expr->as.binop, indent);
             break;
@@ -173,7 +185,8 @@ void printIfStmt(IfStmt* ifStmt, int indent) {
         printBlockStmt(ifStmt->as.ifElse, indent + 2);
 	}
 	else {
-		printIfStmt(ifStmt->as.ifElseIf, indent + 2);
+	printf("Else If Branch:\n");
+	printIfStmt(ifStmt->as.ifElseIf, indent + 2);
 	}
     }
 }
@@ -250,14 +263,14 @@ int main(int argc, char* argv[]) {
 	DynamicArray* ast = parseBuffer(parser);
 
 	if (ast == NULL) {
-		fprintf(stderr, "parsing failed\n");
+		fprintf(stderr, "Parsing failed\n");
 		freeLexer(lexer);
 		freeParser(parser);
 		free(buffer);
 		return 1;
 	}
 	
-	printf("glaubste selber ned, dass das geklappt hat lul\n");
+	printf("Parsing Success\n");
 
 	for (int i = 0; i < ast->size; i++) {
 		printStatement(ast->array[i], 0);

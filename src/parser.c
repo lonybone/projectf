@@ -8,6 +8,9 @@
 Statement* parseStatement(Parser* parser);
 Expression* parseExpression(Parser* parser, int minPrecedence);
 Expression* parsePrimaryExpression(Parser* parser);
+Expression* parseExpression_V2(Parser* parser);
+Expression* parseExpressionToAst(Parser* parser);
+Expression* descent(Expression* this);
 BinOperation* parseBinOperation(BinOperationType type, Expression* left, Expression* right);
 UnaryOperation* parseUnaryOperation(TokenType type, Expression* right);
 BlockStmt* parseBlockStmt(Parser* parser);
@@ -30,6 +33,8 @@ void freeAssignment(Assignment* assignment);
 void freeDeclaration(Declaration* declaration);
 void freeVariable(Variable* variable);
 void freeValue(Value* value);
+
+int VERSION = V2_CUSTOM;
 
 Parser* initializeParser(Lexer* lexer) {
 	if (lexer == NULL) {
@@ -55,6 +60,7 @@ Parser* initializeParser(Lexer* lexer) {
 	parser->lexer = lexer;
 	parser->statements = statements;
 	parser->identifiers = identifiers;
+	parser->version = VERSION;
 
 	return parser;
 }
@@ -104,6 +110,80 @@ static int getBinOpPrecedence(TokenType type) {
         default:
             return 0;
     }
+}
+
+static int getExpressionPrecedence(Expression* expression) {
+
+	if (expression == NULL) {
+		return 0;
+	}
+
+	switch (expression->type) {
+
+		case BINOP_EXPR:
+			switch (expression->as.binop->type) {
+				case ADD_OP:
+					return getBinOpPrecedence(PLUS);
+				case SUB_OP:
+					return getBinOpPrecedence(MINUS);
+				case MUL_OP:
+					return getBinOpPrecedence(MUL);
+				case DIV_OP:
+					return getBinOpPrecedence(DIV);
+				case MOD_OP:
+					return getBinOpPrecedence(MODULUS);
+				case ST_OP:
+					return getBinOpPrecedence(ST);
+				case STE_OP:
+					return getBinOpPrecedence(STE);
+				case GT_OP:
+					return getBinOpPrecedence(GT);
+				case GTE_OP:
+					return getBinOpPrecedence(GTE);
+				case EQ_OP:
+					return getBinOpPrecedence(EQUALS);
+				case NEQ_OP:
+					return getBinOpPrecedence(NEQUALS);
+				default:
+					break;
+			}
+		case VARIABLE_EXPR:
+		case VALUE_EXPR:
+			return 5;
+		default:
+			return 0;
+
+
+	}
+}
+
+static BinOperationType getBinOpType(TokenType type) {
+	switch (type) {
+		case PLUS:
+			return ADD_OP;
+		case MINUS:
+			return SUB_OP;
+		case MUL:
+			return MUL_OP;
+		case DIV:
+			return DIV_OP;
+		case MODULUS:
+			return MOD_OP;
+		case ST:
+			return ST_OP;
+		case STE:
+			return STE_OP;
+		case GT:
+			return GT_OP;
+		case GTE:
+			return GTE_OP;
+		case EQUALS:
+			return EQ_OP;
+		case NEQUALS:
+			return NEQ_OP;
+		default:
+			return -1;
+	}
 }
 
 char* parseToken(Token* token) {
@@ -185,7 +265,15 @@ Statement* parseStatement(Parser* parser) {
 		case FNUM:
 		case LPAREN:
 			statement->type = EXPRESSION_STMT;
-			Expression* expression = parseExpression(parser, 0);
+			Expression* expression;
+
+			if (parser->version == V1_PRATT) {
+				expression = parseExpression(parser, 0);
+			}
+			else {
+				expression = parseExpression_V2(parser);
+			}
+
 			statement->as.expression = expression;
 
 			if (expression == NULL) {
@@ -284,7 +372,12 @@ Expression* parsePrimaryExpression(Parser* parser) {
 		case LPAREN:
 			advanceToken(parser->lexer);
 
-			expression = parseExpression(parser, 0);
+			if (parser->version == V1_PRATT) {
+				expression = parseExpression(parser, 0);
+			}
+			else {
+				expression = parseExpression_V2(parser);
+			}
 
 			if (expression == NULL) {
 				return NULL;
@@ -292,7 +385,19 @@ Expression* parsePrimaryExpression(Parser* parser) {
 
 			if (peekToken(parser->lexer) == NULL || peekToken(parser->lexer)->type != RPAREN) {
 				fprintf(stderr, "Error: Expected token ')'.\n");
-				return NULL;
+				goto error;
+			}
+			
+			if (parser->version == V2_CUSTOM) {
+				Expression* wrapper = calloc(1, sizeof(Expression));
+
+				if (wrapper == NULL) {
+					goto error;
+				}
+
+				wrapper->type = EXPR_WRAPPER_EXPR;
+				wrapper->as.expWrap = expression;
+				expression = wrapper;
 			}
 
 			advanceToken(parser->lexer);
@@ -379,45 +484,7 @@ Expression* parseExpression(Parser* parser, int minPrecedence) {
 
 		else {
 			newLeftExpression->type = BINOP_EXPR;
-			BinOperationType binOpType;
-			
-			switch (type) {
-				case PLUS:
-					binOpType = ADD_OP;
-					break;
-				case MINUS:
-					binOpType = SUB_OP;
-					break;
-				case MUL:
-					binOpType = MUL_OP;
-					break;
-				case DIV:
-					binOpType = DIV_OP;
-					break;
-				case MODULUS:
-					binOpType = MOD_OP;
-					break;
-				case ST:
-					binOpType = ST_OP;
-					break;
-				case STE:
-					binOpType = STE_OP;
-					break;
-				case GT:
-					binOpType = GT_OP;
-					break;
-				case GTE:
-					binOpType = GTE_OP;
-					break;
-				case EQUALS:
-					binOpType = EQ_OP;
-					break;
-				case NEQUALS:
-					binOpType = NEQ_OP;
-					break;
-				default:
-					break;
-			}
+			BinOperationType binOpType = getBinOpType(type);
 
 			newLeftExpression->as.binop = parseBinOperation(binOpType, leftExpression, rightExpression);
 
@@ -432,6 +499,151 @@ Expression* parseExpression(Parser* parser, int minPrecedence) {
 		leftExpression = newLeftExpression;
 	}
 	return leftExpression;
+}
+
+Expression* parseExpression_V2(Parser* parser) {
+	Expression* expression = parseExpressionToAst(parser);
+
+	if (expression == NULL) {
+		return NULL;
+	}
+
+	if (expression->type == ASSIGN_EXPR) {
+		expression->as.assignment->expression = descent(expression->as.assignment->expression);
+
+		if (expression->as.assignment->expression == NULL) {
+			freeExpression(expression);
+			return NULL;
+		}
+
+		return expression;
+	}
+
+	expression = descent(expression);
+
+	if (expression == NULL) {
+		freeExpression(expression);
+		return NULL;
+	}
+
+	return expression;
+}
+
+Expression* parseExpressionToAst(Parser* parser) {
+
+	if (parser == NULL) {
+		return NULL;
+	}
+
+	Expression* leftExpression = parsePrimaryExpression(parser);
+
+	if (leftExpression == NULL) {
+		fprintf(stderr, "Error: Failed to allocate expression in parser\n");
+		return NULL;
+	}
+
+	Token* token = peekToken(parser->lexer);
+
+	if (token == NULL || token->type == E_O_F) {
+		return leftExpression;
+	}
+
+	int precedence = getBinOpPrecedence(token->type);
+
+	if (precedence == 0) {
+		return leftExpression;
+	}
+
+	TokenType type = token->type;
+	advanceToken(parser->lexer);
+
+	if (type == ASSIGN) {
+
+		if(leftExpression->type != VARIABLE_EXPR) {
+			fprintf(stderr, "Error: Invalid target for assignment. Must be a variable.\n");
+			freeExpression(leftExpression);
+			return NULL;
+		}
+
+		Expression* assignment = calloc(1, sizeof(Expression));
+
+		if (assignment == NULL) {
+			freeExpression(leftExpression);
+			return NULL;
+		}
+
+		assignment->type = ASSIGN_EXPR;
+
+		Expression* rightExpression = parseExpressionToAst(parser);
+
+		if (rightExpression == NULL) {
+			freeExpression(leftExpression);
+			freeExpression(assignment);
+			return NULL;
+		}
+
+		assignment->as.assignment = parseAssignment(leftExpression->as.variable, rightExpression);
+
+		if (assignment->as.assignment == NULL) {
+			freeExpression(assignment);
+			freeExpression(leftExpression);
+			freeExpression(rightExpression);
+			return NULL;
+		}
+
+		return assignment;
+	}
+
+	else {
+		Expression* binOperation = calloc(1, sizeof(Expression));
+
+		if (binOperation == NULL) {
+			freeExpression(leftExpression);
+			return NULL;
+		}
+
+		binOperation->type = BINOP_EXPR;
+		BinOperationType binOpType = getBinOpType(type);
+
+		Expression* rightExpression = parseExpressionToAst(parser);
+
+		if (rightExpression == NULL) {
+			freeExpression(leftExpression);
+			freeExpression(binOperation);
+			return NULL;
+		}
+
+		binOperation->as.binop = parseBinOperation(binOpType, leftExpression, rightExpression);
+
+		if (binOperation->as.binop == NULL || binOperation->as.binop->right == NULL) {
+			freeExpression(binOperation);
+			freeExpression(leftExpression);
+			freeExpression(rightExpression);
+			return NULL;
+		}
+
+		return binOperation;
+	}
+}
+
+Expression* descent(Expression* this) {
+
+	if (this == NULL || this->type != BINOP_EXPR) {
+		return this;
+	}
+
+	while (this->as.binop->right != NULL && this->as.binop->right->type == BINOP_EXPR && getExpressionPrecedence(this->as.binop->right) <= getExpressionPrecedence(this)) {
+
+		Expression* prevThis = this;
+		Expression* prevRLCH = this->as.binop->right->as.binop->left;
+		this = this->as.binop->right;
+
+		this->as.binop->left = prevThis;
+		prevThis->as.binop->right = prevRLCH;
+	}
+
+	this->as.binop->right = descent(this->as.binop->right);
+	return this;
 }
 
 BinOperation* parseBinOperation(BinOperationType type, Expression* left, Expression* right) {
@@ -513,7 +725,12 @@ WhileStmt* parseWhileStmt(Parser* parser) {
 		return NULL;
 	}
 
-	whileStmt->condition = parseExpression(parser, 0);
+	if (parser->version == V1_PRATT) {
+		whileStmt->condition = parseExpression(parser, 0);
+	}
+	else {
+		whileStmt->condition = parseExpression_V2(parser);
+	}
 	
 	if (whileStmt->condition == NULL) {
 		freeWhileStmt(whileStmt);
@@ -551,7 +768,12 @@ IfStmt* parseIfStmt(Parser* parser) {
 		return NULL;
 	}
 
-	ifStmt->condition = parseExpression(parser, 0);
+	if (parser->version == V1_PRATT) {
+		ifStmt->condition = parseExpression(parser, 0);
+	}
+	else {
+		ifStmt->condition = parseExpression_V2(parser);
+	}
 	
 	if (ifStmt->condition == NULL) {
 		freeIfStmt(ifStmt);
@@ -654,8 +876,8 @@ Value* parseValue(Token* token) {
 			value->as.i_32 = strtol(token->start, NULL, 10);
 			break;
 		case FNUM:
-			value->type = FLOAT_TYPE;
-			value->as.f = strtod(token->start, NULL);
+			value->type = DOUBLE_TYPE;
+			value->as.df = strtod(token->start, NULL);
 			break;
 		default:
 			return NULL;

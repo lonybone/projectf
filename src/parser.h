@@ -20,6 +20,11 @@ typedef struct Variable Variable;
 typedef struct Value Value;
 
 typedef enum {
+	V1_PRATT,
+	V2_CUSTOM
+} ParserVersion;
+
+typedef enum {
 	EXPRESSION_STMT,
 	BLOCK_STMT,
 	WHILE_STMT,
@@ -29,6 +34,7 @@ typedef enum {
 } StatementType;
 
 typedef enum {
+	EXPR_WRAPPER_EXPR,
 	ASSIGN_EXPR,
 	BINOP_EXPR,
 	UNARY_EXPR,
@@ -71,6 +77,7 @@ struct Parser {
 	Lexer* lexer;
 	DynamicArray* statements;
 	HashTable* identifiers;
+	ParserVersion version;
 };
 
 struct Statement {
@@ -91,6 +98,7 @@ struct BlockStmt {
 struct Expression {
 	ExpressionType type;
 	union {
+		Expression* expWrap;
 		BinOperation* binop;
 		UnaryOperation* unop;
 		Assignment* assignment;
