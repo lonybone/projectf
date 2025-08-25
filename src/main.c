@@ -248,13 +248,7 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	Lexer* lexer = initializeLexer(buffer);
-
-	if (lexer == NULL) {
-		return 1;
-	}
-
-	Parser* parser = initializeParser(lexer);
+	Parser* parser = initializeParser(buffer);
 
 	if (parser == NULL) {
 		return 1;
@@ -264,7 +258,6 @@ int main(int argc, char* argv[]) {
 
 	if (ast == NULL) {
 		fprintf(stderr, "Parsing failed\n");
-		freeLexer(lexer);
 		freeParser(parser);
 		free(buffer);
 		return 1;
@@ -282,7 +275,6 @@ int main(int argc, char* argv[]) {
 		freeStatement(stmt);
 	}
 
-	freeLexer(lexer);
 	freeParser(parser);
 	freeArray(ast);
 	free(buffer);

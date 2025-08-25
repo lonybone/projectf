@@ -3,11 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-Codegen* initializeCodegen(DynamicArray* statements);
 int addToBuffer(Codegen* codegen, const char* token);
-int generate(Codegen* codegen);
 int generateExpression(Codegen* codegen);
-int freeCodegen(Codegen* codegen);
 
 Codegen* initializeCodegen(DynamicArray* statements) {
 	
@@ -41,6 +38,9 @@ Codegen* initializeCodegen(DynamicArray* statements) {
 	return codegen;
 }
 
+// TODO:
+int generate(Codegen* codegen);
+
 int addToBuffer(Codegen* codegen, const char* token) {
 
 	if (codegen == NULL || token == NULL) {
@@ -73,8 +73,6 @@ int addToBuffer(Codegen* codegen, const char* token) {
 	return 0;
 }
 
-// TODO:
-int generate(Codegen* codegen);
 
 /* 
  Algo:

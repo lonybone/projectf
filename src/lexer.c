@@ -31,6 +31,23 @@ void freeLexer(Lexer* lexer) {
 	free(lexer);
 }
 
+int setLexerBuffer(Lexer* lexer, char* buffer) {
+	if (lexer == NULL || buffer == NULL) {
+		return 1;
+	}
+
+	lexer->buff = buffer;
+	lexer->idx = 0;
+	lexer->currentToken = getToken(lexer);
+
+	if (lexer->currentToken == NULL) {
+		freeLexer(lexer);
+		return 0;
+	}
+
+	return 0;
+}
+
 Token* getToken(Lexer* lexer) {
 
 	if (lexer == NULL) {

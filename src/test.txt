@@ -15,7 +15,7 @@ comp3 = c > d
 comp4 = c >= d
 comp5 = x == 10
 comp6 = y != 3.14
-complexcomp = a + b > c - d
+complexcomp = a * b * c - a + y > c - d
 {
   a = 1
   b = 2

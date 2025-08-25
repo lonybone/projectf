@@ -76,7 +76,6 @@ typedef enum {
 struct Parser {
 	Lexer* lexer;
 	DynamicArray* statements;
-	HashTable* identifiers;
 	ParserVersion version;
 };
 
@@ -163,8 +162,9 @@ struct Value {
 	} as;
 };
 
-Parser* initializeParser(Lexer* lexer);
+Parser* initializeParser(char* buffer);
 DynamicArray* parseBuffer(Parser* parser);
+int setParserBuffer(Parser* parser, char* buffer);
 void freeParser(Parser* parser);
 void freeStatement(Statement* statement);
 

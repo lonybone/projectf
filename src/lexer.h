@@ -62,6 +62,7 @@ struct Token {
 
 Lexer* initializeLexer(char* b);
 void freeLexer(Lexer* lexer);
+int setLexerBuffer(Lexer* lexer, char* buffer);
 Token* getToken(Lexer* lexer);
 Token* peekToken(Lexer* lexer);
 void advanceToken(Lexer* lexer);

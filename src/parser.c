@@ -36,7 +36,10 @@ void freeValue(Value* value);
 
 int VERSION = V2_CUSTOM;
 
-Parser* initializeParser(Lexer* lexer) {
+Parser* initializeParser(char* buffer) {
+
+	Lexer* lexer = initializeLexer(buffer);
+
 	if (lexer == NULL) {
 		return NULL;
 	}
@@ -48,18 +51,15 @@ Parser* initializeParser(Lexer* lexer) {
 	}
 	
 	DynamicArray* statements = dynamicArray(2);
-	HashTable* identifiers = hashTable(256);
 
-	if (statements == NULL || identifiers == NULL) {
+	if (statements == NULL ) {
 		freeArray(statements);
-		freeTable(identifiers);
 		freeParser(parser);
 		return NULL;
 	}
 
 	parser->lexer = lexer;
 	parser->statements = statements;
-	parser->identifiers = identifiers;
 	parser->version = VERSION;
 
 	return parser;
@@ -90,8 +90,29 @@ DynamicArray* parseBuffer(Parser* parser) {
 		appendStmt(parser->statements, statement);
 	}
 
-	return parser->statements;
+	DynamicArray* ret = parser->statements;
+	parser->statements = dynamicArray(2);
+
+	if (parser->statements == NULL) {
+		freeParser(parser);
+		return NULL;
+	}
+
+	return ret;
 }
+
+int setParserBuffer(Parser* parser, char* buffer) {
+	if (parser == NULL || buffer == NULL) {
+		return 1;
+	}
+	
+	if (!setLexerBuffer(parser->lexer, buffer)) {
+		return 1;
+	}
+
+	return 0;
+}
+
 
 static int getBinOpPrecedence(TokenType type) {
 	switch (type) {
@@ -1059,5 +1080,6 @@ void freeParser(Parser* parser) {
 	if (parser == NULL) {
 		return;
 	}
-	freeTable(parser->identifiers);
+	freeLexer(parser->lexer);
+	free(parser);
 }
