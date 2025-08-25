@@ -958,6 +958,9 @@ void freeExpression(Expression* expression) {
 	}
 
 	switch (expression->type) {
+		case EXPR_WRAPPER_EXPR:
+			freeExpression(expression->as.expWrap);
+			freeExpression(expression);
 		case BINOP_EXPR:
 			freeBinOperation(expression->as.binop);
 			break;
