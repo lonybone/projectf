@@ -284,5 +284,6 @@ int main(int argc, char* argv[]) {
 
 	freeLexer(lexer);
 	freeParser(parser);
+	freeArray(ast);
 	free(buffer);
 }

@@ -75,6 +75,10 @@ DynamicArray* parseBuffer(Parser* parser) {
 		Statement* statement = parseStatement(parser);
 
 		if (statement == NULL) {
+			for (int i = 0; i < parser->statements->size; i++) {
+				Statement* stmt = (Statement*)parser->statements->array[i];
+				freeStatement(stmt);
+			}
 			return NULL;
 		}
 
@@ -1055,6 +1059,5 @@ void freeParser(Parser* parser) {
 	if (parser == NULL) {
 		return;
 	}
-	freeArray(parser->statements);
 	freeTable(parser->identifiers);
 }
