@@ -6,7 +6,6 @@
 
 int generateStatement(Codegen* codegen, Statement* statement);
 int generateExpression(Codegen* codegen, Expression* expression);
-int generateStatement(Codegen* codegen, Statement* statement);
 int generateBinOperation(Codegen* codegen, BinOperation* binOperation);
 int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation);
 int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt);
@@ -121,7 +120,79 @@ int addToBuffer(Codegen* codegen, const char* token) {
  variables will be looked up and just move their value into rax
  values will just move their value into rax
 */
-int generateExpression(Codegen* codegen, Expression* expression);
+int generateExpression(Codegen* codegen, Expression* expression) {
+
+	if (codegen == NULL || expression == NULL) {
+		return 1;
+	}
+
+	switch (expression->type) {
+		case EXPR_WRAPPER_EXPR:
+			return generateExpression(codegen, expression->as.expWrap);
+		case ASSIGN_EXPR:
+			return generateAssignment(codegen, expression->as.assignment);
+		case UNARY_EXPR:
+			return generateUnaryOperation(codegen, expression->as.unop);
+		case BINOP_EXPR:
+			return generateBinOperation(codegen, expression->as.binop);
+		case VARIABLE_EXPR:
+			return generateVariable(codegen, expression->as.variable);
+		case VALUE_EXPR:
+			return generateValue(codegen, expression->as.value);
+	}
+}
+
+int generateBinOperation(Codegen* codegen, BinOperation* binOperation) {
+	
+	if (codegen == NULL || binOperation == NULL) {
+		return 1;
+	}
+
+	if (generateExpression(codegen, binOperation->right) == 1) return 1;
+	if (addToBuffer(codegen, "push rax\n") == 1) return 1;
+	if (generateExpression(codegen, binOperation->left) == 1) return 1;
+	if (addToBuffer(codegen, "pop rdx\n") == 1) return 1;
+
+	switch (binOperation->type) {
+		case ADD_OP:
+			return addToBuffer(codegen, "add rax, rdx\n");
+		case SUB_OP:
+			return addToBuffer(codegen, "sub rax, rdx\n");
+		case MUL_OP:
+			return addToBuffer(codegen, "mul rdx\n");
+		case DIV_OP:
+			return addToBuffer(codegen, "div rdx\n");
+		case MOD_OP:
+			fprintf(stderr, "Error: Operator Modulus not implemented yet");
+			return 1;
+		case ST_OP:
+			// addToBuffer(codegen, "cmp rax, rdx\njl label");
+			fprintf(stderr, "Error: Operator jl not implemented yet");
+			return 1;
+		case STE_OP:
+			// addToBuffer(codegen, "cmp rax, rdx\njle label");
+			fprintf(stderr, "Error: Operator jl not implemented yet");
+			return 1;
+		case GT_OP:
+			// addToBuffer(codegen, "cmp rax, rdx\njg label");
+			fprintf(stderr, "Error: Operator jl not implemented yet");
+			return 1;
+		case GTE_OP:
+			// addToBuffer(codegen, "cmp rax, rdx\njge label");
+			fprintf(stderr, "Error: Operator jl not implemented yet");
+			return 1;
+		case EQ_OP:
+			// addToBuffer(codegen, "cmp rax, rdx\nje label");
+			fprintf(stderr, "Error: Operator jl not implemented yet");
+			return 1;
+		case NEQ_OP:
+			// addToBuffer(codegen, "cmp rax, rdx\njne label");
+			fprintf(stderr, "Error: Operator jl not implemented yet");
+			return 1;
+		default:
+			return 1;
+	}
+}
 
 void freeCodegen(Codegen* codegen) {
 	if (codegen == NULL) {
