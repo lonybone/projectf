@@ -171,23 +171,23 @@ int generateBinOperation(Codegen* codegen, BinOperation* binOperation) {
 			return 1;
 		case STE_OP:
 			// addToBuffer(codegen, "cmp rax, rdx\njle label");
-			fprintf(stderr, "Error: Operator jl not implemented yet");
+			fprintf(stderr, "Error: Operator jle not implemented yet");
 			return 1;
 		case GT_OP:
 			// addToBuffer(codegen, "cmp rax, rdx\njg label");
-			fprintf(stderr, "Error: Operator jl not implemented yet");
+			fprintf(stderr, "Error: Operator jg not implemented yet");
 			return 1;
 		case GTE_OP:
 			// addToBuffer(codegen, "cmp rax, rdx\njge label");
-			fprintf(stderr, "Error: Operator jl not implemented yet");
+			fprintf(stderr, "Error: Operator jge not implemented yet");
 			return 1;
 		case EQ_OP:
 			// addToBuffer(codegen, "cmp rax, rdx\nje label");
-			fprintf(stderr, "Error: Operator jl not implemented yet");
+			fprintf(stderr, "Error: Operator je not implemented yet");
 			return 1;
 		case NEQ_OP:
 			// addToBuffer(codegen, "cmp rax, rdx\njne label");
-			fprintf(stderr, "Error: Operator jl not implemented yet");
+			fprintf(stderr, "Error: Operator jne not implemented yet");
 			return 1;
 		default:
 			return 1;
