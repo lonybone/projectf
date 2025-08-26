@@ -134,10 +134,19 @@ int checkExpression(Expression* expression) {
 	}
 }
 
+// check if variable already has a type, if so then check wether expression is of same type
+// if variable has no type then this is a declaration and the type shall be annotated
 int checkAssignment(Assignment* assignment) { return 0; }
+// check wether left and right expression satisfy the same type recursively
+// annotate own type after checking if both children have the same type as that type
+// if one expression has no type yet then this is a compile time error of attempting to access non initialized variable
 int checkBinOperation(BinOperation* binOperation) { return 0; }
+// check wether expression is of type boolean (! operator) or a number (- operator)
 int checkUnaryOperation(UnaryOperation* unaryOperation) { return 0; }
+// if the variable has a type then just return
+// if the variable has no type, then also return since its a declaration w/o initialization
 int checkVariable(Variable* variable) { return 0; }
+// just return the value
 int checkValue(Value* value) { return 0; }
 
 int checkBlockStmt(BlockStmt* blockStmt) {
@@ -163,7 +172,6 @@ int checkWhileStmt(WhileStmt* whileStmt) {
 
 	return 0;
 }
-
 
 int checkIfStmt(IfStmt* ifStmt) {
 	if (ifStmt == NULL) {
