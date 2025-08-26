@@ -23,8 +23,9 @@ typedef struct DynamicArray {
 } DynamicArray;
 
 DynamicArray* dynamicArray(int growthFactor);
-void* getStmt(DynamicArray* dynamicArray, int idx);
-bool appendStmt(DynamicArray* dynamicArray, void* statement);
+void* getItem(DynamicArray* dynamicArray, int idx);
+int pushItem(DynamicArray* dynamicArray, void* item);
+void* popItem(DynamicArray* dynamicArray);
 void freeArray(DynamicArray* dynamicArray);
 
 // function by Dan Bernstein found on http://www.cse.yorku.ca/~oz/hash.html

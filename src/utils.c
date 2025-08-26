@@ -26,7 +26,7 @@ DynamicArray *dynamicArray(int growthFactor) {
 	return dynamicArray;
 }
 
-void* getStmt(DynamicArray* dynamicArray, int idx) {
+void* getItem(DynamicArray* dynamicArray, int idx) {
 	if (idx < 0 || idx >= dynamicArray->size) {
 		fprintf(stderr, "index out of range for dynamic Array");
 		return NULL;
@@ -34,8 +34,8 @@ void* getStmt(DynamicArray* dynamicArray, int idx) {
 	return dynamicArray->array[idx];
 }
 
-bool appendStmt(DynamicArray *dynamicArray, void *statement) {
-	dynamicArray->array[dynamicArray->size++] = statement;
+int pushItem(DynamicArray *dynamicArray, void *item) {
+	dynamicArray->array[dynamicArray->size++] = item;
 
 	if (dynamicArray->size == dynamicArray->maxSize) {
 
@@ -43,14 +43,40 @@ bool appendStmt(DynamicArray *dynamicArray, void *statement) {
 		void** tmp = realloc(dynamicArray->array, dynamicArray->maxSize * sizeof(void*));
 
 		if (tmp == NULL) {
-			fprintf(stderr, "failed to allocate static array in dynamic array");
-			return false;
+			fprintf(stderr, "Error: failed to allocate static array in dynamic array in pushItem");
+			return 1;
 		}
 
 		dynamicArray->array = tmp;
 	}
 
-	return true;
+	return 1;
+}
+
+void* popItem(DynamicArray* dynamicArray) {
+	
+	if (dynamicArray == NULL || dynamicArray->size == 0) {
+		return NULL;
+	}
+
+	void* ret = dynamicArray->array[dynamicArray->size-1];
+	dynamicArray->array[dynamicArray->size-1] = NULL;
+	dynamicArray->size--;
+
+	if (dynamicArray->size <= dynamicArray->maxSize / dynamicArray->growthFactor) {
+
+		dynamicArray->maxSize /= dynamicArray->growthFactor;
+		void** tmp = realloc(dynamicArray->array, dynamicArray->maxSize * sizeof(void*));
+
+		if (tmp == NULL) {
+			return ret;
+		}
+
+		dynamicArray->array = tmp;
+
+	}
+
+	return ret;
 }
 
 void freeArray(DynamicArray* dynamicArray) {
@@ -171,81 +197,3 @@ void freeTable(HashTable *table) {
 
 	free(table);
 }
-
-/*
-void printTable(HashTable* table) {
-    printf("\n--- HASH TABLE CONTENTS ---\n");
-    for (int i = 0; i < table->size; i++) {
-        printf("Bucket %d: ", i);
-        Bucket* current = table->array[i];
-        if (current == NULL) {
-            printf("~empty~\n");
-        } else {
-            while (current != NULL) {
-                printf("[\"%s\": \"%s\"] -> ", current->id, current->value);
-                current = current->next;
-            }
-            printf("NULL\n");
-        }
-    }
-    printf("---------------------------\n\n");
-}
-
-int main() {
-    printf("🧪 Initializing Hash Table with size 5...\n");
-    HashTable* myTable = hashTable(5);
-    if (!myTable) {
-        return 1; // Exit if allocation fails
-    }
-
-    printTable(myTable);
-
-    printf("➡️ Inserting key-value pairs...\n");
-    insertKeyPair(myTable, "name", "Gandalf");
-    insertKeyPair(myTable, "race", "Maia");
-    insertKeyPair(myTable, "item", "Glamdring");
-    insertKeyPair(myTable, "alias", "Mithrandir"); // This will likely collide with "race"
-    insertKeyPair(myTable, "enemy", "Balrog");
-
-    printTable(myTable);
-
-    printf("⚠️ Attempting to insert a duplicate key ('name')...\n");
-    insertKeyPair(myTable, "name", "Sauron"); // Should fail and print an error
-
-    printf("\n🔄 Updating value for key 'item'...\n");
-    updateKeyPair(myTable, "item", "Staff of Power");
-    printTable(myTable);
-    
-    printf("🔄 Attempting to update non-existent key 'location'...\n");
-    if (updateKeyPair(myTable, "location", "Middle-earth") == DOESNT_EXIST) {
-        printf("   (Successfully detected that key does not exist)\n");
-    }
-
-
-    printf("\n🗑️ Removing key 'race' (head of a list)...\n");
-    removeKey(myTable, "race");
-    printTable(myTable);
-
-    printf("🗑️ Removing key 'item'...\n");
-    removeKey(myTable, "item");
-    printTable(myTable);
-
-    printf("\n🧹 Freeing all table buckets and nodes...\n");
-    freeTable(myTable);
-    printf("✅ Testing complete. Memory freed.\n");
-
-    return 0;
-}
-*/
-
-/*
-int main(int argc, char* argv[]) {
-	DynamicArray* arr = dynamicArray(2);
-	for(int i = 0; i < 10; i++) {
-		append(arr, malloc(sizeof(Statement*)));
-		printf("just added pointer with value: %p\n", get(arr, i));
-	}
-	freeArray(arr);
-	free(arr);
-}
-*/

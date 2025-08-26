@@ -87,7 +87,7 @@ DynamicArray* parseBuffer(Parser* parser) {
 			break;
 		}
 
-		appendStmt(parser->statements, statement);
+		pushItem(parser->statements, statement);
 	}
 
 	DynamicArray* ret = parser->statements;
@@ -725,7 +725,7 @@ BlockStmt* parseBlockStmt(Parser* parser) {
 			return NULL;
 		}
 
-		appendStmt(blockStmt->stmts, statement);
+		pushItem(blockStmt->stmts, statement);
 	}
 
 	if (peekToken(parser->lexer) == NULL || peekToken(parser->lexer)->type != RCURL) {
@@ -960,7 +960,7 @@ void freeExpression(Expression* expression) {
 	switch (expression->type) {
 		case EXPR_WRAPPER_EXPR:
 			freeExpression(expression->as.expWrap);
-			freeExpression(expression);
+			break;
 		case BINOP_EXPR:
 			freeBinOperation(expression->as.binop);
 			break;

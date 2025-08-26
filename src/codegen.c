@@ -1,10 +1,21 @@
 #include "codegen.h"
+#include "parser.h"
 #include "utils.h"
 #include <stdlib.h>
 #include <string.h>
 
-int addToBuffer(Codegen* codegen, const char* token);
-int generateExpression(Codegen* codegen);
+int generateStatement(Codegen* codegen, Statement* statement);
+int generateExpression(Codegen* codegen, Expression* expression);
+int generateStatement(Codegen* codegen, Statement* statement);
+int generateBinOperation(Codegen* codegen, BinOperation* binOperation);
+int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation);
+int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt);
+int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt);
+int generateIfStmt(Codegen* codegen, IfStmt* ifStmt);
+int generateAssignment(Codegen* codegen, Assignment* assignment);
+int generateDeclaration(Codegen* codegen, Declaration* declaration);
+int generateValue(Codegen* codegen, Value* value);
+int generateVariable(Codegen* codegen, Variable* variable);
 
 Codegen* initializeCodegen(DynamicArray* statements) {
 	
@@ -27,6 +38,13 @@ Codegen* initializeCodegen(DynamicArray* statements) {
 		return NULL;
 	}
 
+	codegen->scopes = dynamicArray(2);
+
+	if (codegen->scopes == NULL) {
+		freeCodegen(codegen);
+		return NULL;
+	}
+
 	codegen->statements = statements;
 	codegen->idTable = hashTable(1024);
 
@@ -36,6 +54,15 @@ Codegen* initializeCodegen(DynamicArray* statements) {
 	}
 
 	return codegen;
+}
+
+DynamicArray* peekScope(Codegen* codegen) {
+
+	if (codegen == NULL || codegen->scopes->size == 0) {
+		return NULL;
+	}
+
+	return (DynamicArray*)codegen->scopes->array[codegen->scopes->size-1];
 }
 
 // TODO:
@@ -94,7 +121,7 @@ int addToBuffer(Codegen* codegen, const char* token) {
  variables will be looked up and just move their value into rax
  values will just move their value into rax
 */
-int generateExpression(Codegen* codegen);
+int generateExpression(Codegen* codegen, Expression* expression);
 
 void freeCodegen(Codegen* codegen) {
 	if (codegen == NULL) {

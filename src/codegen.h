@@ -9,6 +9,7 @@ struct Codegen {
 	int idx;
 	int maxSize;
 	char* buffer;
+	DynamicArray* scopes;
 	DynamicArray* statements;
 	HashTable* idTable;
 };
