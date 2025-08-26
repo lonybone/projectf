@@ -29,12 +29,13 @@ void* popItem(DynamicArray* dynamicArray);
 void freeArray(DynamicArray* dynamicArray);
 
 // function by Dan Bernstein found on http://www.cse.yorku.ca/~oz/hash.html
+// added double parenthesis in while condition for clarity
 static inline unsigned long hash(unsigned char *str)
 {
     unsigned long hash = 5381;
     int c;
 
-    while (c = *str++)
+    while ((c = *str++))
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
     return hash;

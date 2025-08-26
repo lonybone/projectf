@@ -905,6 +905,7 @@ Value* parseValue(Token* token) {
 			value->as.df = strtod(token->start, NULL);
 			break;
 		default:
+			fprintf(stderr, "Error: Type not implemented yet");
 			return NULL;
 	}
 

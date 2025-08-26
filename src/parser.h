@@ -64,6 +64,7 @@ typedef enum {
 
 typedef enum {
 	NULL_TYPE,
+	BOOL_TYPE,
 	INT_TYPE,
 	LONG_TYPE,
 	LONG_LONG_TYPE,
@@ -96,6 +97,7 @@ struct BlockStmt {
 
 struct Expression {
 	ExpressionType type;
+	ValueType valueType;
 	union {
 		Expression* expWrap;
 		BinOperation* binop;
@@ -146,6 +148,7 @@ struct Declaration {
 };
 
 struct Variable {
+	ValueType type;
 	char* id;
 };
 

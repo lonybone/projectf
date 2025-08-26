@@ -4,6 +4,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+int checkTypes(Codegen* codegen);
+int checkStatement(Statement* statement);
+int checkBlockStmt(BlockStmt* blockStmt);
+int checkWhileStmt(WhileStmt* whileStmt);
+int checkIfStmt(IfStmt* ifStmt);
+int checkExpression(Expression* expression);
+int checkAssignment(Assignment* assignment);
+int checkBinOperation(BinOperation* binOperation);
+int checkUnaryOperation(UnaryOperation* unaryOperation);
+int checkVariable(Variable* variable);
+int checkValue(Value* value);
+
 int generateStatement(Codegen* codegen, Statement* statement);
 int generateExpression(Codegen* codegen, Expression* expression);
 int generateBinOperation(Codegen* codegen, BinOperation* binOperation);
@@ -12,7 +24,6 @@ int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt);
 int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt);
 int generateIfStmt(Codegen* codegen, IfStmt* ifStmt);
 int generateAssignment(Codegen* codegen, Assignment* assignment);
-int generateDeclaration(Codegen* codegen, Declaration* declaration);
 int generateValue(Codegen* codegen, Value* value);
 int generateVariable(Codegen* codegen, Variable* variable);
 
@@ -64,6 +75,114 @@ DynamicArray* peekScope(Codegen* codegen) {
 	return (DynamicArray*)codegen->scopes->array[codegen->scopes->size-1];
 }
 
+int checkTypes(Codegen* codegen) {
+
+	if (codegen == NULL) {
+		return 1;
+	}
+
+	for (int i = 0; i < codegen->statements->size; i++) {
+		if (checkStatement(codegen->statements->array[i]) == 1) return 1;
+	}
+
+	return 0;
+}
+
+int checkStatement(Statement* statement) {
+	
+	if (statement == NULL) {
+		return 1;
+	}
+	
+	switch (statement->type) {
+		case EXPRESSION_STMT:
+			return checkExpression(statement->as.expression);
+		case BLOCK_STMT:
+			return checkBlockStmt(statement->as.blockStmt);
+		case WHILE_STMT:
+			return checkWhileStmt(statement->as.whileStmt);
+		case IF_STMT:
+			return checkIfStmt(statement->as.ifStmt);
+		case DECLARATION_STMT:
+		default:
+			fprintf(stderr, "Error: unexpected Statement type in checkStatement");
+			return 1;
+	}
+}
+
+int checkExpression(Expression* expression) {
+	if (expression == NULL) {
+		return 1;
+	}
+
+	switch (expression->type) {
+		case EXPR_WRAPPER_EXPR:
+			return checkExpression(expression->as.expWrap);
+		case ASSIGN_EXPR:
+			return checkAssignment(expression->as.assignment);
+		case BINOP_EXPR:
+			return checkBinOperation(expression->as.binop);
+		case UNARY_EXPR:
+			return checkUnaryOperation(expression->as.unop);
+		case VARIABLE_EXPR:
+			return checkVariable(expression->as.variable);
+		case VALUE_EXPR:
+			return checkValue(expression->as.value);
+		default:
+			fprintf(stderr, "Error: unexpected Expression type in checkExpression");
+			return 1;
+	}
+}
+
+int checkAssignment(Assignment* assignment) { return 0; }
+int checkBinOperation(BinOperation* binOperation) { return 0; }
+int checkUnaryOperation(UnaryOperation* unaryOperation) { return 0; }
+int checkVariable(Variable* variable) { return 0; }
+int checkValue(Value* value) { return 0; }
+
+int checkBlockStmt(BlockStmt* blockStmt) {
+	if (blockStmt == NULL) {
+		return 1;
+	}
+
+	for (int i = 0; i < blockStmt->stmts->size; i++) {
+		if(checkStatement(blockStmt->stmts->array[i]) == 1) return 1;
+	}
+
+	return 0;
+}
+
+int checkWhileStmt(WhileStmt* whileStmt) {
+	if (whileStmt == NULL) {
+		return 1;
+	}
+
+	Expression* condition = whileStmt->condition;
+	if(checkExpression(whileStmt->condition) == 1 || condition->valueType != BOOL_TYPE) return 1;
+	if(checkBlockStmt(whileStmt->body) == 1) return 1;
+
+	return 0;
+}
+
+
+int checkIfStmt(IfStmt* ifStmt) {
+	if (ifStmt == NULL) {
+		return 1;
+	}
+
+	Expression* condition = ifStmt->condition;
+	if(checkExpression(ifStmt->condition) == 1 || condition->valueType != BOOL_TYPE) return 1;
+
+	if (ifStmt->type == IF_ELSE) {
+		if(checkBlockStmt(ifStmt->as.ifElse) == 1) return 1;
+	}
+
+	else if (ifStmt->type == IF_ELSE_IF) {
+		if(checkIfStmt(ifStmt->as.ifElseIf) == 1) return 1;
+	}
+
+	return 0;
+}
 // TODO:
 int generate(Codegen* codegen);
 
@@ -99,6 +218,14 @@ int addToBuffer(Codegen* codegen, const char* token) {
 	return 0;
 }
 
+int generateStatement(Codegen* codegen, Statement* statement) { return 0; }
+int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation) { return 0; }
+int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt) { return 0; }
+int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt) { return 0; }
+int generateIfStmt(Codegen* codegen, IfStmt* ifStmt) { return 0; }
+int generateAssignment(Codegen* codegen, Assignment* assignment) { return 0; }
+int generateValue(Codegen* codegen, Value* value) { return 0; }
+int generateVariable(Codegen* codegen, Variable* variable) { return 0; }
 
 /* 
  Algo:
@@ -139,6 +266,9 @@ int generateExpression(Codegen* codegen, Expression* expression) {
 			return generateVariable(codegen, expression->as.variable);
 		case VALUE_EXPR:
 			return generateValue(codegen, expression->as.value);
+		default:
+			fprintf(stderr, "Error: Unexpected Expression type in generate Expression");
+			return 1;
 	}
 }
 
