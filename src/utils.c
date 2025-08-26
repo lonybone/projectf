@@ -34,6 +34,15 @@ void* getItem(DynamicArray* dynamicArray, int idx) {
 	return dynamicArray->array[idx];
 }
 
+DynamicArray* peekArray(DynamicArray* dynamicArray) {
+
+	if (dynamicArray == NULL || dynamicArray->size == 0) {
+		return NULL;
+	}
+
+	return dynamicArray->array[dynamicArray->size-1];
+}
+
 int pushItem(DynamicArray *dynamicArray, void *item) {
 	dynamicArray->array[dynamicArray->size++] = item;
 
@@ -50,7 +59,7 @@ int pushItem(DynamicArray *dynamicArray, void *item) {
 		dynamicArray->array = tmp;
 	}
 
-	return 1;
+	return 0;
 }
 
 void* popItem(DynamicArray* dynamicArray) {
@@ -98,7 +107,7 @@ HashTable* hashTable(int size) {
 	return table;
 }
 
-Operation insertKeyPair(HashTable *table, char *key, char *value) {
+Operation insertKeyPair(HashTable *table, char *key, int value) {
 	unsigned long hashedKey = hash((unsigned char*)key) % table->size;
 
 	Bucket* current = table->array[hashedKey];
@@ -117,10 +126,9 @@ Operation insertKeyPair(HashTable *table, char *key, char *value) {
 	}
 
 	newBucket->id = strdup(key);
-	newBucket->value = strdup(value);
-	if (newBucket->id == NULL || newBucket->value == NULL) {
+	newBucket->value = value;
+	if (newBucket->id == NULL) {
 		free(newBucket->id);
-		free(newBucket->value);
 		free(newBucket);
 		return ALLOC_FAIL;
 	}
@@ -130,21 +138,13 @@ Operation insertKeyPair(HashTable *table, char *key, char *value) {
 	return SUCCESS;
 }
 
-Operation updateKeyPair(HashTable *table, char *key, char *value) {
+Operation updateKeyPair(HashTable *table, char *key, int value) {
 	unsigned long hashedKey = hash((unsigned char*)key) % table->size;
 
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
-			char* newValue = strdup(value);
-			
-			if (newValue == NULL) {
-				fprintf(stderr, "Error: failed to allocate new value %s for key %s in updateKeyPair", value, key);
-				return ALLOC_FAIL;
-			}
-
-			free(current->value);
-			current->value = newValue;
+			current->value = value;
 			return SUCCESS;
 		}
 		current = current->next;
@@ -170,7 +170,6 @@ void removeKey(HashTable *table, char *key) {
 			}
 
 			free(current->id);
-			free(current->value);
 			free(current);
 			return;
 		}
@@ -186,7 +185,6 @@ void freeTable(HashTable *table) {
 
 		while (current != NULL) {
 			free(current->id);
-			free(current->value);
 
 			previous = current;
 			current = current->next;

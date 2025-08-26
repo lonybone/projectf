@@ -5,16 +5,16 @@
 #include <string.h>
 
 int checkTypes(Codegen* codegen);
-int checkStatement(Statement* statement);
-int checkBlockStmt(BlockStmt* blockStmt);
-int checkWhileStmt(WhileStmt* whileStmt);
-int checkIfStmt(IfStmt* ifStmt);
-int checkExpression(Expression* expression);
-int checkAssignment(Assignment* assignment);
-int checkBinOperation(BinOperation* binOperation);
-int checkUnaryOperation(UnaryOperation* unaryOperation);
-int checkVariable(Variable* variable);
-int checkValue(Value* value);
+int checkStatement(DynamicArray* typeScopes, Statement* statement);
+int checkBlockStmt(DynamicArray* typeScopes, BlockStmt* blockStmt);
+int checkWhileStmt(DynamicArray* typeScopes, WhileStmt* whileStmt);
+int checkIfStmt(DynamicArray* typeScopes, IfStmt* ifStmt);
+int checkExpression(DynamicArray* typeScopes, Expression* expression);
+int checkAssignment(DynamicArray* typeScopes, Assignment* assignment);
+int checkBinOperation(DynamicArray* typeScopes, BinOperation* binOperation);
+int checkUnaryOperation(DynamicArray* typeScopes, UnaryOperation* unaryOperation);
+int checkVariable(DynamicArray* typeScopes, Variable* variable);
+int checkValue(DynamicArray* typeScopes, Value* value);
 
 int generateStatement(Codegen* codegen, Statement* statement);
 int generateExpression(Codegen* codegen, Expression* expression);
@@ -27,9 +27,9 @@ int generateAssignment(Codegen* codegen, Assignment* assignment);
 int generateValue(Codegen* codegen, Value* value);
 int generateVariable(Codegen* codegen, Variable* variable);
 
-Codegen* initializeCodegen(DynamicArray* statements) {
+Codegen* initializeCodegen(DynamicArray* ast) {
 	
-	if (statements == NULL) {
+	if (ast == NULL) {
 		return NULL;
 	}
 
@@ -55,8 +55,8 @@ Codegen* initializeCodegen(DynamicArray* statements) {
 		return NULL;
 	}
 
-	codegen->statements = statements;
-	codegen->idTable = hashTable(1024);
+	codegen->ast = ast;
+	codegen->idTable = hashTable(256);
 
 	if (codegen->idTable == NULL) {
 		freeCodegen(codegen);
@@ -66,29 +66,49 @@ Codegen* initializeCodegen(DynamicArray* statements) {
 	return codegen;
 }
 
-DynamicArray* peekScope(Codegen* codegen) {
-
-	if (codegen == NULL || codegen->scopes->size == 0) {
-		return NULL;
-	}
-
-	return (DynamicArray*)codegen->scopes->array[codegen->scopes->size-1];
-}
-
 int checkTypes(Codegen* codegen) {
 
 	if (codegen == NULL) {
 		return 1;
 	}
 
-	for (int i = 0; i < codegen->statements->size; i++) {
-		if (checkStatement(codegen->statements->array[i]) == 1) return 1;
+	DynamicArray* typeScopes = dynamicArray(2);
+
+	if (typeScopes == NULL) {
+		return 1;
 	}
 
+	HashTable* typeTable = hashTable(256);
+
+	if (typeTable == NULL) {
+		return 1;
+	}
+
+	if (pushItem(typeScopes, typeTable) == 1) return 1;
+
+	for (int i = 0; i < codegen->ast->size; i++) {
+		if (checkStatement(typeScopes, codegen->ast->array[i]) == 1) { 
+
+			for (int i = 0; i < codegen->ast->size; i++) {
+				HashTable* table = (HashTable*)codegen->ast->array[i];
+				freeTable(table);
+			}
+
+			freeArray(typeScopes);
+			return 1;
+		}
+	}
+
+	for (int i = 0; i < codegen->ast->size; i++) {
+		HashTable* table = (HashTable*)codegen->ast->array[i];
+		freeTable(table);
+	}
+
+	freeArray(typeScopes);
 	return 0;
 }
 
-int checkStatement(Statement* statement) {
+int checkStatement(DynamicArray* typeScopes, Statement* statement) {
 	
 	if (statement == NULL) {
 		return 1;
@@ -96,13 +116,13 @@ int checkStatement(Statement* statement) {
 	
 	switch (statement->type) {
 		case EXPRESSION_STMT:
-			return checkExpression(statement->as.expression);
+			return checkExpression(typeScopes, statement->as.expression);
 		case BLOCK_STMT:
-			return checkBlockStmt(statement->as.blockStmt);
+			return checkBlockStmt(typeScopes, statement->as.blockStmt);
 		case WHILE_STMT:
-			return checkWhileStmt(statement->as.whileStmt);
+			return checkWhileStmt(typeScopes, statement->as.whileStmt);
 		case IF_STMT:
-			return checkIfStmt(statement->as.ifStmt);
+			return checkIfStmt(typeScopes, statement->as.ifStmt);
 		case DECLARATION_STMT:
 		default:
 			fprintf(stderr, "Error: unexpected Statement type in checkStatement");
@@ -110,24 +130,24 @@ int checkStatement(Statement* statement) {
 	}
 }
 
-int checkExpression(Expression* expression) {
+int checkExpression(DynamicArray* typeScopes, Expression* expression) {
 	if (expression == NULL) {
 		return 1;
 	}
 
 	switch (expression->type) {
 		case EXPR_WRAPPER_EXPR:
-			return checkExpression(expression->as.expWrap);
+			return checkExpression(typeScopes, expression->as.expWrap);
 		case ASSIGN_EXPR:
-			return checkAssignment(expression->as.assignment);
+			return checkAssignment(typeScopes, expression->as.assignment);
 		case BINOP_EXPR:
-			return checkBinOperation(expression->as.binop);
+			return checkBinOperation(typeScopes, expression->as.binop);
 		case UNARY_EXPR:
-			return checkUnaryOperation(expression->as.unop);
+			return checkUnaryOperation(typeScopes, expression->as.unop);
 		case VARIABLE_EXPR:
-			return checkVariable(expression->as.variable);
+			return checkVariable(typeScopes, expression->as.variable);
 		case VALUE_EXPR:
-			return checkValue(expression->as.value);
+			return checkValue(typeScopes, expression->as.value);
 		default:
 			fprintf(stderr, "Error: unexpected Expression type in checkExpression");
 			return 1;
@@ -136,57 +156,57 @@ int checkExpression(Expression* expression) {
 
 // check if variable already has a type, if so then check wether expression is of same type
 // if variable has no type then this is a declaration and the type shall be annotated
-int checkAssignment(Assignment* assignment) { return 0; }
+int checkAssignment(DynamicArray* typeScopes, Assignment* assignment) { return 0; }
 // check wether left and right expression satisfy the same type recursively
 // annotate own type after checking if both children have the same type as that type
 // if one expression has no type yet then this is a compile time error of attempting to access non initialized variable
-int checkBinOperation(BinOperation* binOperation) { return 0; }
+int checkBinOperation(DynamicArray* typeScopes, BinOperation* binOperation) { return 0; }
 // check wether expression is of type boolean (! operator) or a number (- operator)
-int checkUnaryOperation(UnaryOperation* unaryOperation) { return 0; }
+int checkUnaryOperation(DynamicArray* typeScopes, UnaryOperation* unaryOperation) { return 0; }
 // if the variable has a type then just return
 // if the variable has no type, then also return since its a declaration w/o initialization
-int checkVariable(Variable* variable) { return 0; }
+int checkVariable(DynamicArray* typeScopes, Variable* variable) { return 0; }
 // just return the value
-int checkValue(Value* value) { return 0; }
+int checkValue(DynamicArray* typeScopes, Value* value) { return 0; }
 
-int checkBlockStmt(BlockStmt* blockStmt) {
+int checkBlockStmt(DynamicArray* typeScopes, BlockStmt* blockStmt) {
 	if (blockStmt == NULL) {
 		return 1;
 	}
 
 	for (int i = 0; i < blockStmt->stmts->size; i++) {
-		if(checkStatement(blockStmt->stmts->array[i]) == 1) return 1;
+		if(checkStatement(typeScopes, blockStmt->stmts->array[i]) == 1) return 1;
 	}
 
 	return 0;
 }
 
-int checkWhileStmt(WhileStmt* whileStmt) {
+int checkWhileStmt(DynamicArray* typeScopes, WhileStmt* whileStmt) {
 	if (whileStmt == NULL) {
 		return 1;
 	}
 
 	Expression* condition = whileStmt->condition;
-	if(checkExpression(whileStmt->condition) == 1 || condition->valueType != BOOL_TYPE) return 1;
-	if(checkBlockStmt(whileStmt->body) == 1) return 1;
+	if(checkExpression(typeScopes, whileStmt->condition) == 1 || condition->valueType != BOOL_TYPE) return 1;
+	if(checkBlockStmt(typeScopes, whileStmt->body) == 1) return 1;
 
 	return 0;
 }
 
-int checkIfStmt(IfStmt* ifStmt) {
+int checkIfStmt(DynamicArray* typeScopes, IfStmt* ifStmt) {
 	if (ifStmt == NULL) {
 		return 1;
 	}
 
 	Expression* condition = ifStmt->condition;
-	if(checkExpression(ifStmt->condition) == 1 || condition->valueType != BOOL_TYPE) return 1;
+	if(checkExpression(typeScopes, ifStmt->condition) == 1 || condition->valueType != BOOL_TYPE) return 1;
 
 	if (ifStmt->type == IF_ELSE) {
-		if(checkBlockStmt(ifStmt->as.ifElse) == 1) return 1;
+		if(checkBlockStmt(typeScopes, ifStmt->as.ifElse) == 1) return 1;
 	}
 
 	else if (ifStmt->type == IF_ELSE_IF) {
-		if(checkIfStmt(ifStmt->as.ifElseIf) == 1) return 1;
+		if(checkIfStmt(typeScopes, ifStmt->as.ifElseIf) == 1) return 1;
 	}
 
 	return 0;

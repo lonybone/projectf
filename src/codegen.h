@@ -10,11 +10,11 @@ struct Codegen {
 	int maxSize;
 	char* buffer;
 	DynamicArray* scopes;
-	DynamicArray* statements;
+	DynamicArray* ast;
 	HashTable* idTable;
 };
 
-Codegen* initializeCodegen(DynamicArray* statements);
+Codegen* initializeCodegen(DynamicArray* ast);
 int generate(Codegen* codegen);
 void freeCodegen(Codegen* codegen);
 
