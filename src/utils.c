@@ -53,13 +53,13 @@ int pushItem(DynamicArray *dynamicArray, void *item) {
 
 		if (tmp == NULL) {
 			fprintf(stderr, "Error: failed to allocate static array in dynamic array in pushItem");
-			return 1;
+			return 0;
 		}
 
 		dynamicArray->array = tmp;
 	}
 
-	return 0;
+	return 1;
 }
 
 void* popItem(DynamicArray* dynamicArray) {

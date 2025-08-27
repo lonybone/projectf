@@ -103,14 +103,14 @@ DynamicArray* parseBuffer(Parser* parser) {
 
 int setParserBuffer(Parser* parser, char* buffer) {
 	if (parser == NULL || buffer == NULL) {
-		return 1;
+		return 0;
 	}
 	
 	if (!setLexerBuffer(parser->lexer, buffer)) {
-		return 1;
+		return 0;
 	}
 
-	return 0;
+	return 1;
 }
 
 
