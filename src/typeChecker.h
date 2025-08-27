@@ -9,4 +9,8 @@ struct TypeChecker {
 	DynamicArray* typeScopes;
 };
 
+TypeChecker* initializeChecker (DynamicArray* ast);
+int checkTypes(TypeChecker* typeChecker);
+void freeChecker(TypeChecker* typeChecker);
+
 #endif

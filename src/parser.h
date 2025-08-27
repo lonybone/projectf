@@ -63,7 +63,7 @@ typedef enum {
 } IfStmtOperationType;
 
 typedef enum {
-	NULL_TYPE,
+	UNKNOWN,
 	BOOL_TYPE,
 	INT_TYPE,
 	LONG_TYPE,

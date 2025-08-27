@@ -44,12 +44,6 @@ Codegen* initializeCodegen(DynamicArray* ast) {
 	}
 
 	codegen->ast = ast;
-	codegen->idTable = hashTable(256);
-
-	if (codegen->idTable == NULL) {
-		freeCodegen(codegen);
-		return NULL;
-	}
 
 	return codegen;
 }
@@ -200,7 +194,13 @@ void freeCodegen(Codegen* codegen) {
 	if (codegen == NULL) {
 		return;
 	}
+
+	for (int i = 0; i < codegen->scopes->size; i++) {
+		HashTable* table = (HashTable*)codegen->scopes->array[i];
+		freeTable(table);
+	}
+	
+	freeArray(codegen->scopes);;
 	free(codegen->buffer);
-	freeTable(codegen->idTable);
 	free(codegen);
 }

@@ -27,6 +27,10 @@ DynamicArray *dynamicArray(int growthFactor) {
 }
 
 void* getItem(DynamicArray* dynamicArray, int idx) {
+	if (dynamicArray == NULL) {
+		return NULL;
+	}
+
 	if (idx < 0 || idx >= dynamicArray->size) {
 		fprintf(stderr, "index out of range for dynamic Array");
 		return NULL;
@@ -34,7 +38,10 @@ void* getItem(DynamicArray* dynamicArray, int idx) {
 	return dynamicArray->array[idx];
 }
 
-DynamicArray* peekArray(DynamicArray* dynamicArray) {
+void* peekArray(DynamicArray* dynamicArray) {
+	if (dynamicArray == NULL) {
+		return NULL;
+	}
 
 	if (dynamicArray == NULL || dynamicArray->size == 0) {
 		return NULL;
@@ -44,6 +51,9 @@ DynamicArray* peekArray(DynamicArray* dynamicArray) {
 }
 
 int pushItem(DynamicArray *dynamicArray, void *item) {
+	if (dynamicArray == NULL) {
+		return 0;
+	}
 	dynamicArray->array[dynamicArray->size++] = item;
 
 	if (dynamicArray->size == dynamicArray->maxSize) {
@@ -63,6 +73,9 @@ int pushItem(DynamicArray *dynamicArray, void *item) {
 }
 
 void* popItem(DynamicArray* dynamicArray) {
+	if (dynamicArray == NULL) {
+		return NULL;
+	}
 	
 	if (dynamicArray == NULL || dynamicArray->size == 0) {
 		return NULL;
@@ -89,6 +102,9 @@ void* popItem(DynamicArray* dynamicArray) {
 }
 
 void freeArray(DynamicArray* dynamicArray) {
+	if (dynamicArray == NULL) {
+		return;
+	}
 	free(dynamicArray->array);
 	free(dynamicArray);
 };
@@ -107,13 +123,16 @@ HashTable* hashTable(int size) {
 	return table;
 }
 
-Operation insertKeyPair(HashTable *table, char *key, int value) {
+int insertKeyPair(HashTable *table, char *key, int value) {
+	if (table == NULL || key == NULL) {
+		return 0;
+	}
 	unsigned long hashedKey = hash((unsigned char*)key) % table->size;
 
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
-			return ALREADY_EXISTS;
+			return 0;
 		}
 		current = current->next;
 	}
@@ -122,7 +141,7 @@ Operation insertKeyPair(HashTable *table, char *key, int value) {
 
 	if (newBucket == NULL) {
 		fprintf(stderr, "Error: failed to allocate new Bucket");
-		return ALLOC_FAIL;
+		return 0;
 	}
 
 	newBucket->id = strdup(key);
@@ -130,30 +149,72 @@ Operation insertKeyPair(HashTable *table, char *key, int value) {
 	if (newBucket->id == NULL) {
 		free(newBucket->id);
 		free(newBucket);
-		return ALLOC_FAIL;
+		return 0;
 	}
 
 	newBucket->next = table->array[hashedKey];
 	table->array[hashedKey] = newBucket;
-	return SUCCESS;
+	return 1;
 }
 
-Operation updateKeyPair(HashTable *table, char *key, int value) {
+int containsKey(HashTable* table, char* key) {
+	if (table == NULL || key == NULL) {
+		return 0;
+	}
+
+	unsigned long hashedKey = hash((unsigned char*)key) % table->size;
+
+	Bucket* current = table->array[hashedKey];
+	while (current != NULL) {
+		if (strcmp(current->id, key) == 0) {
+			return 1;
+		}
+		current = current->next;
+	}
+
+	return 0;
+}
+
+int getValue(HashTable* table, char* key) {
+	if (table == NULL || key == NULL) {
+		return -1;
+	}
+
+	unsigned long hashedKey = hash((unsigned char*)key) % table->size;
+
+	Bucket* current = table->array[hashedKey];
+	while (current != NULL) {
+		if (strcmp(current->id, key) == 0) {
+			return current->value;
+		}
+		current = current->next;
+	}
+
+	return -1;
+}
+
+int updateKeyPair(HashTable *table, char *key, int value) {
+	if (table == NULL) {
+		return 0;
+	}
 	unsigned long hashedKey = hash((unsigned char*)key) % table->size;
 
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
 			current->value = value;
-			return SUCCESS;
+			return 1;
 		}
 		current = current->next;
 	}
 
-	return DOESNT_EXIST;
+	return 0;
 }
 
 void removeKey(HashTable *table, char *key) {
+	if (table == NULL || key == NULL) {
+		return;
+	}
 
 	unsigned long hashedKey = hash((unsigned char*)key) % table->size;
 
@@ -179,6 +240,10 @@ void removeKey(HashTable *table, char *key) {
 }
 
 void freeTable(HashTable *table) {
+	if (table == NULL) {
+		return;
+	}
+
 	for (int i = 0; i < table->size; i++) {
 		Bucket* current = table->array[i];
 		Bucket* previous = NULL;

@@ -79,6 +79,7 @@ DynamicArray* parseBuffer(Parser* parser) {
 				Statement* stmt = (Statement*)parser->statements->array[i];
 				freeStatement(stmt);
 			}
+			freeArray(parser->statements);
 			return NULL;
 		}
 
@@ -299,11 +300,13 @@ Statement* parseStatement(Parser* parser) {
 				expression = parseExpression_V2(parser);
 			}
 
-			statement->as.expression = expression;
-
 			if (expression == NULL) {
 				goto error;
 			}
+
+			expression->valueType = UNKNOWN;
+
+			statement->as.expression = expression;
 			
 			break;
 
@@ -347,6 +350,8 @@ Expression* parsePrimaryExpression(Parser* parser) {
 			return NULL;
 		}
 
+		right->valueType = UNKNOWN;
+
 		Expression* unaryExpression = calloc(1, sizeof(Expression));
 
 		if (unaryExpression == NULL) {
@@ -354,6 +359,7 @@ Expression* parsePrimaryExpression(Parser* parser) {
 			return NULL;
 		}
 
+		unaryExpression->valueType = UNKNOWN;
 		unaryExpression->as.unop = parseUnaryOperation(type, right);
 
 		if (unaryExpression->as.unop == NULL) {
@@ -373,7 +379,13 @@ Expression* parsePrimaryExpression(Parser* parser) {
 		case NUM:
 		case FNUM:
 			expression = calloc(1, sizeof(Expression));
+
+			if (expression == NULL) {
+				goto error;
+			}
+
 			expression->type = VALUE_EXPR;
+			expression->valueType = UNKNOWN;
 			expression->as.value = parseValue(token);
 
 			if (expression->as.value == NULL) {
@@ -385,6 +397,12 @@ Expression* parsePrimaryExpression(Parser* parser) {
 
 		case ID:
 			expression = calloc(1, sizeof(Expression));
+
+			if (expression == NULL) {
+				goto error;
+			}
+
+			expression->valueType = UNKNOWN;
 			expression->type = VARIABLE_EXPR;
 			expression->as.variable = parseVariable(token);
 
@@ -408,6 +426,8 @@ Expression* parsePrimaryExpression(Parser* parser) {
 				return NULL;
 			}
 
+			expression->valueType = UNKNOWN;
+
 			if (peekToken(parser->lexer) == NULL || peekToken(parser->lexer)->type != RPAREN) {
 				fprintf(stderr, "Error: Expected token ')'.\n");
 				goto error;
@@ -421,6 +441,7 @@ Expression* parsePrimaryExpression(Parser* parser) {
 				}
 
 				wrapper->type = EXPR_WRAPPER_EXPR;
+				wrapper->valueType = UNKNOWN;
 				wrapper->as.expWrap = expression;
 				expression = wrapper;
 			}
@@ -477,6 +498,8 @@ Expression* parseExpression(Parser* parser, int minPrecedence) {
 			return NULL;
 		}
 
+		rightExpression->valueType = UNKNOWN;
+
 		Expression* newLeftExpression = calloc(1, sizeof(Expression));
 
 		if (newLeftExpression == NULL) {
@@ -486,9 +509,19 @@ Expression* parseExpression(Parser* parser, int minPrecedence) {
 			return NULL;
 		}
 
+		newLeftExpression->valueType = UNKNOWN;
+
 		if (type == ASSIGN) {
-			if(leftExpression->type != VARIABLE_EXPR) {
+			if (leftExpression->type != VARIABLE_EXPR) {
 				fprintf(stderr, "Error: Invalid target for assignment. Must be a variable.\n");
+				freeExpression(leftExpression);
+				freeExpression(rightExpression);
+				freeExpression(newLeftExpression);
+				return NULL;
+			}
+
+			if (rightExpression->type == ASSIGN_EXPR) {
+				fprintf(stderr, "Error: Invalid Expression for assignment. Cannot Assign an Assignment to a Variable.\n");
 				freeExpression(leftExpression);
 				freeExpression(rightExpression);
 				freeExpression(newLeftExpression);
@@ -584,7 +617,7 @@ Expression* parseExpressionToAst(Parser* parser) {
 
 	if (type == ASSIGN) {
 
-		if(leftExpression->type != VARIABLE_EXPR) {
+		if (leftExpression->type != VARIABLE_EXPR) {
 			fprintf(stderr, "Error: Invalid target for assignment. Must be a variable.\n");
 			freeExpression(leftExpression);
 			return NULL;
@@ -604,6 +637,12 @@ Expression* parseExpressionToAst(Parser* parser) {
 		if (rightExpression == NULL) {
 			freeExpression(leftExpression);
 			freeExpression(assignment);
+			return NULL;
+		}
+
+		if (rightExpression->type == ASSIGN_EXPR) {
+			fprintf(stderr, "Error: Invalid Expression for assignment. Cannot Assign an Assignment to a Variable.\n");
+			freeExpression(leftExpression);
 			return NULL;
 		}
 
@@ -880,6 +919,7 @@ Variable* parseVariable(Token* token) {
 		return NULL;
 	}
 
+	variable->type = UNKNOWN;
 	variable->id = parseToken(token);
 	
 	if (variable->id == NULL) {
@@ -946,6 +986,11 @@ void freeBlockStmt(BlockStmt* blockStmt) {
 
 	if (blockStmt == NULL) {
 		return;
+	}
+
+	for (int i = 0; i < blockStmt->stmts->size; i++) {
+		Statement* stmt = (Statement*)blockStmt->stmts->array[i];
+		freeStatement(stmt);
 	}
 
 	freeArray(blockStmt->stmts);

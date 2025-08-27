@@ -8,13 +8,6 @@ static const int INITIAL_CAPACITY = 16;
 typedef struct HashTable HashTable;
 typedef struct Bucket Bucket;
 
-typedef enum {
-	SUCCESS,
-	ALREADY_EXISTS,
-	DOESNT_EXIST,
-	ALLOC_FAIL
-} Operation;
-
 typedef struct DynamicArray {
 	int growthFactor;
 	int maxSize;
@@ -24,7 +17,7 @@ typedef struct DynamicArray {
 
 DynamicArray* dynamicArray(int growthFactor);
 void* getItem(DynamicArray* dynamicArray, int idx);
-DynamicArray* peekArray(DynamicArray* dynamicArray);
+void* peekArray(DynamicArray* dynamicArray);
 int pushItem(DynamicArray* dynamicArray, void* item);
 void* popItem(DynamicArray* dynamicArray);
 void freeArray(DynamicArray* dynamicArray);
@@ -54,9 +47,10 @@ struct Bucket {
 };
 
 HashTable* hashTable(int size);
-char* getValue(HashTable* table, char* key);
-Operation insertKeyPair(HashTable* table, char* key, int value);
-Operation updateKeyPair(HashTable* table, char* key, int value);
+int getValue(HashTable* table, char* key);
+int insertKeyPair(HashTable* table, char* key, int value);
+int containsKey(HashTable* table, char* key);
+int updateKeyPair(HashTable* table, char* key, int value);
 void removeKey(HashTable* table, char* key);
 void freeTable(HashTable* table);
 

@@ -11,7 +11,6 @@ struct Codegen {
 	char* buffer;
 	DynamicArray* scopes;
 	DynamicArray* ast;
-	HashTable* idTable;
 };
 
 Codegen* initializeCodegen(DynamicArray* ast);

@@ -1,6 +1,8 @@
 #include "typeChecker.h"
 #include "parser.h"
 #include "utils.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 int checkTypes(TypeChecker* typeChecker);
 int checkStatement(TypeChecker* typeChecker, Statement* statement);
@@ -14,6 +16,43 @@ int checkUnaryOperation(TypeChecker* typeChecker, UnaryOperation* unaryOperation
 int checkVariable(TypeChecker* typeChecker, Variable* variable);
 int checkValue(TypeChecker* typeChecker, Value* value);
 int varInOneScope(TypeChecker* typeChecker, char* id);
+int getVarTypeFromScopes(TypeChecker* typeChecker, char* id);
+HashTable* getVarScope(TypeChecker* typeChecker, char* id);
+void freeChecker(TypeChecker* typeChecker);
+
+TypeChecker* initializeChecker (DynamicArray* ast) {
+	
+	if (ast == NULL) {
+		return NULL;
+	}
+
+	TypeChecker* typeChecker = calloc(1, sizeof(TypeChecker));
+
+	if (typeChecker == NULL) {
+		return NULL;
+	}
+
+	typeChecker->typeScopes = dynamicArray(2);
+
+	if (typeChecker->typeScopes == NULL) {
+		freeChecker(typeChecker);
+		return NULL;
+	}
+
+	HashTable* typeTable = hashTable(256);
+
+	if (typeTable == NULL) {
+		freeChecker(typeChecker);
+		return NULL;
+	}
+
+	if (!pushItem(typeChecker->typeScopes, typeTable))  {
+		freeChecker(typeChecker);
+		return NULL;
+	}
+
+	return typeChecker;
+}
 
 int checkTypes(TypeChecker* typeChecker) {
 
@@ -21,39 +60,17 @@ int checkTypes(TypeChecker* typeChecker) {
 		return 0;
 	}
 
-	DynamicArray* typeScopes = dynamicArray(2);
-
-	if (typeScopes == NULL) {
-		return 0;
-	}
-
-	HashTable* typeTable = hashTable(256);
-
-	if (typeTable == NULL) {
-		return 0;
-	}
-
-	if (!pushItem(typeScopes, typeTable)) return 0;
-
 	for (int i = 0; i < typeChecker->ast->size; i++) {
 		if (!checkStatement(typeChecker, typeChecker->ast->array[i])) { 
-
-			for (int i = 0; i < typeChecker->ast->size; i++) {
+			for (int i = 0; i < typeChecker->typeScopes->size; i++) {
 				HashTable* table = (HashTable*)typeChecker->typeScopes->array[i];
 				freeTable(table);
 			}
-
-			freeArray(typeScopes);
+			freeArray(typeChecker->typeScopes);
 			return 0;
 		}
 	}
 
-	for (int i = 0; i < typeChecker->ast->size; i++) {
-		HashTable* table = (HashTable*)typeChecker->typeScopes->array[i];
-		freeTable(table);
-	}
-
-	freeArray(typeScopes);
 	return 1;
 }
 
@@ -108,6 +125,37 @@ int checkExpression(TypeChecker* typeChecker, Expression* expression) {
 int checkAssignment(TypeChecker* typeChecker, Assignment* assignment) {
 	if (typeChecker == NULL || assignment == NULL) {
 		return 0;
+	}
+
+	if(!checkExpression(typeChecker, assignment->expression)) return 0;
+
+	Variable* variable = assignment->variable;
+	ValueType variableType = (ValueType)getVarTypeFromScopes(typeChecker, variable->id);
+	ValueType expressionType = assignment->expression->valueType;
+
+	// is not in scope, can be added to current scope
+	if (variableType == -1) {
+		HashTable* currentScope = (HashTable*)peekArray(typeChecker->typeScopes);
+
+		variable->type = expressionType;
+		if(!insertKeyPair(currentScope, variable->id, (int)variable->type)) return 0;
+	}
+
+	// is in one scope
+	else { 
+		HashTable* varScope = getVarScope(typeChecker, variable->id);
+		// not initialized
+		if (variableType == UNKNOWN) {
+
+			variable->type = expressionType;
+			if(!updateKeyPair(varScope, variable->id, variable->type)) return 0;
+		}
+	
+		// type mismatch
+		else if (variableType != expressionType) {
+			fprintf(stderr, "Error: Tried to Assign value of type %d to Variable %s of type %d", expressionType, variable->id, variableType);
+			return 0;
+		}
 	}
 
 	return 1;
@@ -196,5 +244,49 @@ int varInOneScope(TypeChecker* typeChecker, char* id) {
 		return 0;
 	}
 
-	return 1;
+	for (int i = 0; i < typeChecker->typeScopes->size; i++) {
+		if (containsKey((HashTable*)typeChecker->typeScopes->array[i], id)) return 1;
+	}
+
+	return 0;
+}
+
+int getVarTypeFromScopes(TypeChecker* typeChecker, char* id) {
+	if (typeChecker == NULL || id == NULL) {
+		return 0;
+	}
+
+	for (int i = 0; i < typeChecker->typeScopes->size; i++) {
+		if (containsKey(typeChecker->typeScopes->array[i], id)) {
+			return getValue((HashTable*)typeChecker->typeScopes->array[i], id);
+		}
+	}
+
+	return 0;
+}
+
+HashTable* getVarScope(TypeChecker* typeChecker, char* id) {
+	if (typeChecker == NULL || id == NULL) {
+		return NULL;
+	}
+
+	for (int i = 0; i < typeChecker->typeScopes->size; i++) {
+		if (containsKey(typeChecker->typeScopes->array[i], id)) {
+			return (HashTable*)typeChecker->typeScopes->array[i];
+		}
+	}
+
+	return NULL;
+}
+
+void freeChecker(TypeChecker* typeChecker) {
+	if (typeChecker == NULL) return;
+
+	for (int i = 0; i < typeChecker->typeScopes->size; i++) {
+		HashTable* table = (HashTable*)typeChecker->typeScopes->array[i];
+		freeTable(table);
+	}
+
+	freeArray(typeChecker->typeScopes);
+	free(typeChecker);
 }
