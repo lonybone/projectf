@@ -179,7 +179,7 @@ int checkUnaryOperation(TypeChecker* typeChecker, UnaryOperation* unaryOperation
 	return 1;
 }
 // if the variable has a type then just return
-// if the variable has no type, then also return since its a declaration w/o initialization
+// if the variable has no type, then throw a compile time error since this function will only get called inside an expression (as of currently)
 int checkVariable(TypeChecker* typeChecker, Variable* variable) {
 	if (typeChecker == NULL || variable == NULL) {
 		return 0;
@@ -187,7 +187,7 @@ int checkVariable(TypeChecker* typeChecker, Variable* variable) {
 
 	return 1;
 }
-// just return the value
+// just set the value type according to its member
 int checkValue(TypeChecker* typeChecker, Value* value) {
 	if (typeChecker == NULL || value == NULL) {
 		return 0;
