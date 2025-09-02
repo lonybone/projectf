@@ -339,7 +339,6 @@ int generateVariable(Codegen* codegen, Variable* variable) {
 	ValueType variableType = variable->type;
 
 	if (variableType == UNKNOWN) {
-		printf("HUH?????\n");
 		return 1;
 	}
 
