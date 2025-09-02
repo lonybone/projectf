@@ -3,6 +3,7 @@
 
 #include "lexer.h"
 #include "utils.h"
+#include <stdbool.h>
 
 struct DynamicArray;
 
@@ -155,6 +156,7 @@ struct Variable {
 struct Value {
 	ValueType type;
 	union {
+		bool b;
 		int i_16;
 		long i_32;
 		long long i_64;

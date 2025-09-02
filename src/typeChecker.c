@@ -15,8 +15,7 @@ ValueType checkBinOperation(TypeChecker* typeChecker, BinOperation* binOperation
 ValueType checkUnaryOperation(TypeChecker* typeChecker, UnaryOperation* unaryOperation);
 ValueType checkVariable(TypeChecker* typeChecker, Variable* variable);
 ValueType checkValue(TypeChecker* typeChecker, Value* value);
-int varInOneScope(TypeChecker* typeChecker, char* id);
-int getVarTypeFromScopes(TypeChecker* typeChecker, char* id);
+ValueType getVarTypeFromScopes(TypeChecker* typeChecker, char* id);
 HashTable* getVarScope(TypeChecker* typeChecker, char* id);
 void freeChecker(TypeChecker* typeChecker);
 
@@ -108,7 +107,7 @@ int checkStatement(TypeChecker* typeChecker, Statement* statement) {
 			Expression* expression = statement->as.expression;
 			if (expression->type == VARIABLE_EXPR) {
 				Variable* variable = expression->as.variable;
-				ValueType valueType = (ValueType)getVarTypeFromScopes(typeChecker, variable->id);
+				ValueType valueType = getVarTypeFromScopes(typeChecker, variable->id);
 				// variable is not in any scope
 				if (valueType == -1) {
 					HashTable* currentScope = (HashTable*)peekArray(typeChecker->typeScopes);
@@ -184,7 +183,7 @@ ValueType checkAssignment(TypeChecker* typeChecker, Assignment* assignment) {
 	ValueType expressionType = assignment->expression->valueType;
 
 	Variable* variable = assignment->variable;
-	ValueType variableType = (ValueType)getVarTypeFromScopes(typeChecker, variable->id);
+	ValueType variableType = getVarTypeFromScopes(typeChecker, variable->id);
 
 	// is not in scope, can be added to current scope
 	if (variableType == -1) {
@@ -295,7 +294,11 @@ ValueType checkVariable(TypeChecker* typeChecker, Variable* variable) {
 		return -1;
 	}
 
-	return (ValueType)getVarTypeFromScopes(typeChecker, variable->id);
+	ValueType type = getVarTypeFromScopes(typeChecker, variable->id);
+	if (type == -1) return -1;
+	variable->type = type;
+	return type;
+	
 }
 // just set the value type according to its member
 ValueType checkValue(TypeChecker* typeChecker, Value* value) {
@@ -334,7 +337,11 @@ int checkWhileStmt(TypeChecker* typeChecker, WhileStmt* whileStmt) {
 	}
 
 	Expression* condition = whileStmt->condition;
-	if(!checkExpression(typeChecker, whileStmt->condition) || condition->valueType != BOOL_TYPE) return 0;
+	if(!checkExpression(typeChecker, whileStmt->condition)) return 0; 
+	if (condition->valueType != BOOL_TYPE) {
+		fprintf(stderr, "Error: Condition of WhileStatement is not of type boolean\n");
+		return 0;
+	}
 	if(!checkBlockStmt(typeChecker, whileStmt->body)) return 0;
 
 	return 1;
@@ -346,7 +353,11 @@ int checkIfStmt(TypeChecker* typeChecker, IfStmt* ifStmt) {
 	}
 
 	Expression* condition = ifStmt->condition;
-	if(!checkExpression(typeChecker, ifStmt->condition) || condition->valueType != BOOL_TYPE) return 0;
+	if(!checkExpression(typeChecker, ifStmt->condition)) return 0; 
+	if (condition->valueType != BOOL_TYPE) {
+		fprintf(stderr, "Error: Condition of IfStatement is not of type boolean\n");
+		return 0;
+	}
 
 	if(!checkBlockStmt(typeChecker, ifStmt->trueBody)) return 0;
 
@@ -361,26 +372,16 @@ int checkIfStmt(TypeChecker* typeChecker, IfStmt* ifStmt) {
 	return 1;
 }
 
-int varInOneScope(TypeChecker* typeChecker, char* id) {
-	if (typeChecker == NULL || id == NULL) {
-		return 0;
-	}
-
-	for (int i = 0; i < typeChecker->typeScopes->size; i++) {
-		if (containsKey((HashTable*)typeChecker->typeScopes->array[i], id)) return 1;
-	}
-
-	return 0;
-}
-
-int getVarTypeFromScopes(TypeChecker* typeChecker, char* id) {
+ValueType getVarTypeFromScopes(TypeChecker* typeChecker, char* id) {
 	if (typeChecker == NULL || id == NULL) {
 		return -1;
 	}
 
 	for (int i = 0; i < typeChecker->typeScopes->size; i++) {
 		if (containsKey(typeChecker->typeScopes->array[i], id)) {
-			return getValue((HashTable*)typeChecker->typeScopes->array[i], id);
+			Box* valueBox = getValue((HashTable*)typeChecker->typeScopes->array[i], id);
+			if (valueBox == NULL) return -1;
+			return (ValueType)valueBox->value;
 		}
 	}
 

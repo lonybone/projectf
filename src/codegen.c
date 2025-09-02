@@ -1,6 +1,7 @@
 #include "codegen.h"
 #include "parser.h"
 #include "utils.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,6 +15,10 @@ int generateIfStmt(Codegen* codegen, IfStmt* ifStmt);
 int generateAssignment(Codegen* codegen, Assignment* assignment);
 int generateValue(Codegen* codegen, Value* value);
 int generateVariable(Codegen* codegen, Variable* variable);
+int getVariableOffset(Codegen* codegen, char* id);
+HashTable* getScopeForVar(Codegen* codegen, char* id);
+int getTypeSize(ValueType type);
+const char* getRegisterFromSize(int typeSize);
 
 Codegen* initializeCodegen(DynamicArray* ast) {
 	
@@ -43,13 +48,90 @@ Codegen* initializeCodegen(DynamicArray* ast) {
 		return NULL;
 	}
 
+	codegen->stackOffset = 0;
+	HashTable* offsetTable = hashTable(256);
+
+	if (offsetTable == NULL) {
+		freeCodegen(codegen);
+		return NULL;
+	}
+
+	if (!pushItem(codegen->scopes, offsetTable))  {
+		freeCodegen(codegen);
+		return NULL;
+	}
+
 	codegen->ast = ast;
 
 	return codegen;
 }
 
 // TODO:
-int generate(Codegen* codegen);
+int generate(Codegen* codegen) {
+
+	if (codegen == NULL) {
+		return 0;
+	}
+
+	for (int i = 0; i < codegen->ast->size; i++) {
+		if (!generateStatement(codegen, codegen->ast->array[i])) { 
+			for (int i = 0; i < codegen->scopes->size; i++) {
+				HashTable* table = (HashTable*)codegen->scopes->array[i];
+				freeTable(table);
+			}
+
+			freeArray(codegen->scopes);
+			free(codegen->buffer);
+
+			codegen->scopes = dynamicArray(2);
+
+			if (codegen->scopes == NULL) {
+				freeCodegen(codegen);
+				return 0;
+			}
+			
+			codegen->buffer = malloc(1024);
+
+			if (codegen->buffer == NULL) {
+				freeCodegen(codegen);
+				return 0;
+			}
+
+			HashTable* typeTable = hashTable(256);
+
+			if (typeTable == NULL) {
+				freeCodegen(codegen);
+				return 0;
+			}
+
+			if (!pushItem(codegen->scopes, typeTable))  {
+				freeCodegen(codegen);
+				return 0;
+			}
+
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+void writeToFile(Codegen* codegen, const char* filepath) {
+	FILE* file = fopen(filepath, "wb"); 
+
+	if (file == NULL) {
+		fprintf(stderr, "Error: Cannot open file\n");
+		return;
+	}
+
+	int written = fwrite(codegen->buffer, 1, codegen->idx, file);
+	if (written != codegen->idx) {
+		fprintf(stderr, "Error while writing to file\n");
+		return;
+	}
+
+	fclose(file);
+}
 
 int addToBuffer(Codegen* codegen, const char* token) {
 
@@ -79,39 +161,39 @@ int addToBuffer(Codegen* codegen, const char* token) {
 
 	memcpy(codegen->buffer + codegen->idx, token, token_len);
 	codegen->idx += token_len;
+	codegen->buffer[codegen->idx] = '\0';
 
 	return 1;
 }
 
-int generateStatement(Codegen* codegen, Statement* statement) { return 1; }
-int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation) { return 1; }
+int generateStatement(Codegen* codegen, Statement* statement) {
+
+	if (codegen == NULL || statement == NULL) {
+		return 0;
+	}
+	
+	switch (statement->type) {
+		case EXPRESSION_STMT:
+			return generateExpression(codegen, statement->as.expression);
+		case BLOCK_STMT:
+			return generateBlockStmt(codegen, statement->as.blockStmt);
+		case WHILE_STMT:
+			return generateWhileStmt(codegen, statement->as.whileStmt);
+		case IF_STMT:
+			return generateIfStmt(codegen, statement->as.ifStmt);
+		case DECLARATION_STMT:
+		default:
+			fprintf(stderr, "Error: Unexpected Statement type in generateStatement\n");
+			return 0;
+	}
+}
+
+// needs to create a new scope at start and remove it at the end
+// needs to handle correct increment/decrement of the global stack offset variable by e.g. remembering offset at start and resetting it at the end
 int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt) { return 1; }
 int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt) { return 1; }
 int generateIfStmt(Codegen* codegen, IfStmt* ifStmt) { return 1; }
-int generateAssignment(Codegen* codegen, Assignment* assignment) { return 1; }
-int generateValue(Codegen* codegen, Value* value) { return 1; }
-int generateVariable(Codegen* codegen, Variable* variable) { return 1; }
 
-/* 
- Algo:
- eval(right);
- "push rax\n"
- eval(left)
- "pop rdx\n"
- [here the operation due to operation type will be performed:
- 	add -> add rax, rdx
-	sub -> sub rax, rdx
-	mul -> mul rdx
-	div -> div rdx
-	lt, lte, gt, gte, eq, neq -> cmp rax, rdx\n jl/jle/jg/jge/je/jne label
-	unary -> TODO:
- ]
-
- binops will just do this again
- unops will first call this on their expression member and then logical not on rax
- variables will be looked up and just move their value into rax
- values will just move their value into rax
-*/
 int generateExpression(Codegen* codegen, Expression* expression) {
 
 	if (codegen == NULL || expression == NULL) {
@@ -132,7 +214,7 @@ int generateExpression(Codegen* codegen, Expression* expression) {
 		case VALUE_EXPR:
 			return generateValue(codegen, expression->as.value);
 		default:
-			fprintf(stderr, "Error: Unexpected Expression type in generate Expression");
+			fprintf(stderr, "Error: Unexpected Expression type in generate Expression\n");
 			return 0;
 	}
 }
@@ -158,35 +240,211 @@ int generateBinOperation(Codegen* codegen, BinOperation* binOperation) {
 		case DIV_OP:
 			return addToBuffer(codegen, "div rdx\n");
 		case MOD_OP:
-			fprintf(stderr, "Error: Operator Modulus not implemented yet");
+			fprintf(stderr, "Error: Operator Modulus not implemented yet\n");
 			return 0;
 		case ST_OP:
-			// addToBuffer(codegen, "cmp rax, rdx\njl label");
-			fprintf(stderr, "Error: Operator jl not implemented yet");
-			return 0;
 		case STE_OP:
-			// addToBuffer(codegen, "cmp rax, rdx\njle label");
-			fprintf(stderr, "Error: Operator jle not implemented yet");
-			return 0;
 		case GT_OP:
-			// addToBuffer(codegen, "cmp rax, rdx\njg label");
-			fprintf(stderr, "Error: Operator jg not implemented yet");
-			return 0;
 		case GTE_OP:
-			// addToBuffer(codegen, "cmp rax, rdx\njge label");
-			fprintf(stderr, "Error: Operator jge not implemented yet");
-			return 0;
 		case EQ_OP:
-			// addToBuffer(codegen, "cmp rax, rdx\nje label");
-			fprintf(stderr, "Error: Operator je not implemented yet");
-			return 0;
 		case NEQ_OP:
-			// addToBuffer(codegen, "cmp rax, rdx\njne label");
-			fprintf(stderr, "Error: Operator jne not implemented yet");
-			return 0;
+			if (!addToBuffer(codegen, "cmp rax, rdx\n")) return 0;
+			switch (binOperation->type) {
+				case ST_OP:
+					if(!addToBuffer(codegen, "setl al\n")) return 0;
+					break;
+				case STE_OP:
+					if(!addToBuffer(codegen, "setle al\n")) return 0;
+					break;
+				case GT_OP:
+					if(!addToBuffer(codegen, "setg al\n")) return 0;
+					break;
+				case GTE_OP:
+					if(!addToBuffer(codegen, "setge al\n")) return 0;
+					break;
+				case EQ_OP:
+					if(!addToBuffer(codegen, "sete al\n")) return 0;
+					break;
+				case NEQ_OP:
+					if(!addToBuffer(codegen, "setne al\n")) return 0;
+					break;
+				default:
+					fprintf(stderr, "Error: Encountered illegal Operand in generateBinOperation\n");
+					return 0;
+			}
+			return addToBuffer(codegen, "movzx rax, al\n");
 		default:
-			fprintf(stderr, "Error: Encountered illegal operand");
+			fprintf(stderr, "Error: Encountered illegal Operand generateBinOperation\n");
 			return 0;
+	}
+}
+
+int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation) {
+	if (codegen == NULL || unaryOperation == NULL) {
+		return 0;
+	}
+
+	if (unaryOperation->type == NOT) {
+		if (!generateExpression(codegen, unaryOperation->right)) return 0;
+		return addToBuffer(codegen, "test rax, rax\nsetz al\nmovzx rax, al\n");
+	}
+	else if (unaryOperation->type == MINUS) {
+		if (!generateExpression(codegen, unaryOperation->right)) return 0;
+		return addToBuffer(codegen, "neg rax\n");
+	}
+
+	fprintf(stderr, "Error: Unexpected Unary Operation Operand encountered in generateUnaryOperation: %d\n", unaryOperation->type);
+	return 0;
+}
+
+// if this assignment is a declaration+initialization, then increment some global offset variable by the variables inferred type size in bytes and add it to scopes at highest scope ofc
+// if it is not a declaration then just grab the stack location of that variable from the scopes
+// global stack offset must also be so that it gets decremented so that it matches the types length in byte
+int generateAssignment(Codegen* codegen, Assignment* assignment) {
+	if (codegen == NULL || assignment == NULL) {
+		return 0;
+	}
+
+	if (!generateExpression(codegen, assignment->expression)) return 0;
+	int variableOffset = getVariableOffset(codegen, assignment->variable->id);
+
+	ValueType variableType = assignment->variable->type;
+	int typeSize = getTypeSize(variableType);
+	const char* reg = getRegisterFromSize(typeSize);
+
+	// variable is not in any scope yet, this is a declaration
+	if (!variableOffset) {
+		int alignment = typeSize;
+		int remainder = abs(codegen->stackOffset) % alignment;
+		int padding = (remainder == 0) ? 0 : alignment - remainder;
+
+		codegen->stackOffset -= (typeSize + padding);
+		variableOffset = codegen->stackOffset;
+
+		HashTable* currentScope = peekArray(codegen->scopes);
+		if (!insertKeyPair(currentScope, assignment->variable->id, variableOffset)) return 0;
+	}
+
+	char lastInstruction[64];
+	snprintf(lastInstruction, sizeof(lastInstruction), "mov [rbp%d], %s\n", variableOffset, reg);
+
+	return addToBuffer(codegen, lastInstruction);
+}
+
+int generateVariable(Codegen* codegen, Variable* variable) {
+	if (codegen == NULL || variable == NULL) {
+		return 0;
+	}
+
+	ValueType variableType = variable->type;
+
+	if (variableType == UNKNOWN) {
+		printf("HUH?????\n");
+		return 1;
+	}
+
+	int variableOffset = getVariableOffset(codegen, variable->id);
+	int typeSize = getTypeSize(variableType);
+	char instr[64];
+
+	switch (typeSize) {
+		case 1:
+			snprintf(instr, sizeof(instr), "movzx rax, BYTE [rbp%d]\n", variableOffset);
+			break;
+		case 4:
+			snprintf(instr, sizeof(instr), "mov eax, [rbp%d]\n", variableOffset);
+			break;
+		case 8:
+			snprintf(instr, sizeof(instr), "mov rax, [rbp%d]\n", variableOffset);
+			break;
+		default:
+			fprintf(stderr, "Error: Unsupported type size in generateVariable\n");
+			return 0;
+	}
+	
+	return addToBuffer(codegen, instr);
+}
+
+int generateValue(Codegen* codegen, Value* value) {
+	if (codegen == NULL || value == NULL) {
+		return 0;
+	}
+	char instr[64];
+	switch (value->type) {
+		case LONG_TYPE:
+			snprintf(instr, sizeof(instr), "mov rax, %lld\n", value->as.i_64);
+			return addToBuffer(codegen, instr);
+		case DOUBLE_TYPE:
+			fprintf(stderr, "Error: Did not implement float Types yet :(\n");
+			return 0;
+		case BOOL_TYPE:
+			snprintf(instr, sizeof(instr), "mov al, %d\n", value->as.b);
+			return addToBuffer(codegen, instr);
+		default:
+			fprintf(stderr, "Error: Unregognized Value Type in generateValue\n");
+			return 0;
+	}
+}
+
+int getVariableOffset(Codegen* codegen, char* id) {
+	if (codegen == NULL || id == NULL) {
+		return 0;
+	}
+
+	for (int i = 0; i < codegen->scopes->size; i++) {
+		if (containsKey(codegen->scopes->array[i], id)) {
+			Box* valueBox = getValue((HashTable*)codegen->scopes->array[i], id);
+			if (valueBox == NULL) return 0;
+			return valueBox->value;
+		}
+	}
+
+	return 0;
+}
+
+HashTable* getScopeForVar(Codegen* codegen, char* id) {
+	if (codegen == NULL || id == NULL) {
+		return NULL;
+	}
+
+	for (int i = 0; i < codegen->scopes->size; i++) {
+		if (containsKey(codegen->scopes->array[i], id)) {
+			return (HashTable*)codegen->scopes->array[i];
+		}
+	}
+
+	return NULL;
+}
+
+int getTypeSize(ValueType type) {
+	switch(type) {
+		case LONG_TYPE:
+			return 8;
+		case DOUBLE_TYPE:
+			fprintf(stderr, "Error: Did not implement float Types yet :(\n");
+			return 0;
+		case BOOL_TYPE:
+			return 1;
+		default:
+			fprintf(stderr, "Error: Unrecognized Type, cannot get type Offset\n");
+			return 0;
+			
+	}
+}
+
+const char* getRegisterFromSize(int typeSize) {
+	switch (typeSize) {
+		case 1:
+			return "al";
+		case 2:
+			return "ax";
+		case 4:
+			return "eax";
+		case 8:
+			return "rax";
+		default:
+			fprintf(stderr, "Error: Encountered invalid typeSize in getRegisterFromSize: %d\n", typeSize);
+			return NULL;
 	}
 }
 
@@ -200,7 +458,7 @@ void freeCodegen(Codegen* codegen) {
 		freeTable(table);
 	}
 	
-	freeArray(codegen->scopes);;
+	freeArray(codegen->scopes);
 	free(codegen->buffer);
 	free(codegen);
 }

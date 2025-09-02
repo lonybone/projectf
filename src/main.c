@@ -3,6 +3,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "typeChecker.h"
+#include "codegen.h"
 #include "utils.h"
 
 char* parseArgs(int argc, char* argv[]) {
@@ -288,6 +289,25 @@ int main(int argc, char* argv[]) {
 
 	printf("TypeChecking Success!\n\n");
 
+	Codegen* codegen = initializeCodegen(ast);
+
+	if (codegen == NULL) {
+		freeChecker(typeChecker);
+		freeParser(parser);
+		free(buffer);
+		return 1;
+	}
+
+	if (!generate(codegen)) {
+		freeChecker(typeChecker);
+		freeParser(parser);
+		freeCodegen(codegen);
+		free(buffer);
+		return 1;
+	}
+
+	writeToFile(codegen, "compiled_test.txt");
+
 	for (int i = 0; i < ast->size; i++) {
 		printStatement(ast->array[i], 0);
 		printf("\n");
@@ -300,6 +320,7 @@ int main(int argc, char* argv[]) {
 
 	freeParser(parser);
 	freeChecker(typeChecker);
+	freeCodegen(codegen);
 	freeArray(ast);
 	free(buffer);
 }

@@ -145,12 +145,18 @@ int insertKeyPair(HashTable *table, char *key, int value) {
 	}
 
 	newBucket->id = strdup(key);
-	newBucket->value = value;
 	if (newBucket->id == NULL) {
+		free(newBucket);
+		return 0;
+	}
+
+	newBucket->box = malloc(sizeof(Box));
+	if (newBucket->box == NULL) {
 		free(newBucket->id);
 		free(newBucket);
 		return 0;
 	}
+	newBucket->box->value = value;
 
 	newBucket->next = table->array[hashedKey];
 	table->array[hashedKey] = newBucket;
@@ -175,9 +181,9 @@ int containsKey(HashTable* table, char* key) {
 	return 0;
 }
 
-int getValue(HashTable* table, char* key) {
+Box* getValue(HashTable* table, char* key) {
 	if (table == NULL || key == NULL) {
-		return -1;
+		return NULL;
 	}
 
 	unsigned long hashedKey = hash((unsigned char*)key) % table->size;
@@ -185,12 +191,12 @@ int getValue(HashTable* table, char* key) {
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
-			return current->value;
+			return current->box;
 		}
 		current = current->next;
 	}
 
-	return -1;
+	return NULL;
 }
 
 int updateKeyPair(HashTable *table, char *key, int value) {
@@ -202,7 +208,7 @@ int updateKeyPair(HashTable *table, char *key, int value) {
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
-			current->value = value;
+			current->box->value = value;
 			return 1;
 		}
 		current = current->next;
@@ -231,6 +237,7 @@ void removeKey(HashTable *table, char *key) {
 			}
 
 			free(current->id);
+			free(current->box);
 			free(current);
 			return;
 		}
@@ -250,6 +257,7 @@ void freeTable(HashTable *table) {
 
 		while (current != NULL) {
 			free(current->id);
+			free(current->box);
 
 			previous = current;
 			current = current->next;

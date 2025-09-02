@@ -7,6 +7,7 @@ static const int INITIAL_CAPACITY = 16;
 
 typedef struct HashTable HashTable;
 typedef struct Bucket Bucket;
+typedef struct Box Box;
 
 typedef struct DynamicArray {
 	int growthFactor;
@@ -42,12 +43,16 @@ struct HashTable {
 
 struct Bucket {
 	char* id;
-	int value;
+	Box* box;
 	Bucket* next;
 };
 
+struct Box {
+	int value;
+};
+
 HashTable* hashTable(int size);
-int getValue(HashTable* table, char* key);
+Box* getValue(HashTable* table, char* key);
 int insertKeyPair(HashTable* table, char* key, int value);
 int containsKey(HashTable* table, char* key);
 int updateKeyPair(HashTable* table, char* key, int value);

@@ -936,10 +936,16 @@ Value* parseValue(Token* token) {
 	if (value == NULL) return NULL;
 
 	switch (token->type) {
-		case NUM:
+		case NUM: {
 			value->type = LONG_TYPE;
-			value->as.i_32 = strtol(token->start, NULL, 10);
+
+			char buffer[token->length + 1];
+			memcpy(buffer, token->start, token->length);
+			buffer[token->length] = '\0';
+			
+			value->as.i_64 = strtoll(buffer, NULL, 10);
 			break;
+		}
 		case FNUM:
 			value->type = DOUBLE_TYPE;
 			value->as.df = strtod(token->start, NULL);
