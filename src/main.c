@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "lexer.h"
 #include "parser.h"
+#include "typeChecker.h"
 #include "utils.h"
 
 char* parseArgs(int argc, char* argv[]) {
@@ -220,6 +221,8 @@ void printStatement(Statement* stmt, int indent) {
         case EXPRESSION_STMT:
             printIndent(indent);
             printf("ExpressionStmt:\n");
+            printIndent(indent);
+	    printf("Expression Valuetype: %d\n", stmt->as.expression->valueType);
             printExpression(stmt->as.expression, indent + 1);
             break;
         case BLOCK_STMT:
@@ -251,6 +254,7 @@ int main(int argc, char* argv[]) {
 	Parser* parser = initializeParser(buffer);
 
 	if (parser == NULL) {
+		free(buffer);
 		return 1;
 	}
 
@@ -263,7 +267,26 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	
-	printf("Parsing Success\n");
+	printf("Parsing Success!\n");
+
+	TypeChecker* typeChecker = initializeChecker(ast);
+
+	if (typeChecker == NULL) {
+		freeChecker(typeChecker);
+		freeParser(parser);
+		free(buffer);
+		return 1;
+	}
+
+	if(!checkTypes(typeChecker)) {
+		fprintf(stderr, "TypeChecking failed\n");
+		freeChecker(typeChecker);
+		freeParser(parser);
+		free(buffer);
+		return 1;
+	}
+
+	printf("TypeChecking Success!\n\n");
 
 	for (int i = 0; i < ast->size; i++) {
 		printStatement(ast->array[i], 0);
@@ -276,6 +299,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	freeParser(parser);
+	freeChecker(typeChecker);
 	freeArray(ast);
 	free(buffer);
 }
