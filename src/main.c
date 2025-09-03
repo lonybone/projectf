@@ -287,7 +287,7 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	printf("TypeChecking Success!\n\n");
+	printf("TypeChecking Success!\n");
 
 	Codegen* codegen = initializeCodegen(ast);
 
@@ -299,12 +299,15 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (!generate(codegen)) {
+		fprintf(stderr, "Generating Failed!\n");
 		freeChecker(typeChecker);
 		freeParser(parser);
 		freeCodegen(codegen);
 		free(buffer);
 		return 1;
 	}
+
+	printf("Generation Success!\n");
 
 	writeToFile(codegen, "compiled_test.txt");
 

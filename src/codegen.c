@@ -4,7 +4,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
+int generate(Codegen* codegen);
+int generateStackFrames(Codegen* codegen);
+int generateGlobalStatement(Codegen* codegen, Statement* statement);
+int generateGlobalAssignment(Codegen* codegen, Assignment* assignment);
+Value* calculateGlobalExpression(Expression* expression);
+Value* addValues(BinOperationType binOpType, Value* left, Value* right);
 int generateStatement(Codegen* codegen, Statement* statement);
 int generateExpression(Codegen* codegen, Expression* expression);
 int generateBinOperation(Codegen* codegen, BinOperation* binOperation);
@@ -48,72 +55,8 @@ Codegen* initializeCodegen(DynamicArray* ast) {
 		return NULL;
 	}
 
-	codegen->stackOffset = 0;
-	HashTable* offsetTable = hashTable(256);
-
-	if (offsetTable == NULL) {
-		freeCodegen(codegen);
-		return NULL;
-	}
-
-	if (!pushItem(codegen->scopes, offsetTable))  {
-		freeCodegen(codegen);
-		return NULL;
-	}
-
 	codegen->ast = ast;
-
 	return codegen;
-}
-
-// TODO:
-int generate(Codegen* codegen) {
-
-	if (codegen == NULL) {
-		return 0;
-	}
-
-	for (int i = 0; i < codegen->ast->size; i++) {
-		if (!generateStatement(codegen, codegen->ast->array[i])) { 
-			for (int i = 0; i < codegen->scopes->size; i++) {
-				HashTable* table = (HashTable*)codegen->scopes->array[i];
-				freeTable(table);
-			}
-
-			freeArray(codegen->scopes);
-			free(codegen->buffer);
-
-			codegen->scopes = dynamicArray(2);
-
-			if (codegen->scopes == NULL) {
-				freeCodegen(codegen);
-				return 0;
-			}
-			
-			codegen->buffer = malloc(1024);
-
-			if (codegen->buffer == NULL) {
-				freeCodegen(codegen);
-				return 0;
-			}
-
-			HashTable* typeTable = hashTable(256);
-
-			if (typeTable == NULL) {
-				freeCodegen(codegen);
-				return 0;
-			}
-
-			if (!pushItem(codegen->scopes, typeTable))  {
-				freeCodegen(codegen);
-				return 0;
-			}
-
-			return 0;
-		}
-	}
-
-	return 1;
 }
 
 void writeToFile(Codegen* codegen, const char* filepath) {
@@ -164,6 +107,382 @@ int addToBuffer(Codegen* codegen, const char* token) {
 	codegen->buffer[codegen->idx] = '\0';
 
 	return 1;
+}
+
+int generate(Codegen* codegen) {
+
+	if (codegen == NULL) {
+		return 0;
+	}
+
+	for (int i = 0; i < codegen->ast->size; i++) {
+		int res;
+		if (codegen->scopes->size == 0) {
+			res = generateGlobalStatement(codegen, codegen->ast->array[i]);
+		}
+		else { 
+			res = generateStatement(codegen, codegen->ast->array[i]);
+		}
+
+		if (!res) {
+			for (int i = 0; i < codegen->scopes->size; i++) {
+				HashTable* table = (HashTable*)codegen->scopes->array[i];
+				freeTable(table);
+			}
+
+			freeArray(codegen->scopes);
+			free(codegen->buffer);
+
+			codegen->scopes = dynamicArray(2);
+
+			if (codegen->scopes == NULL) {
+				freeCodegen(codegen);
+				return 0;
+			}
+			
+			codegen->buffer = malloc(1024);
+
+			if (codegen->buffer == NULL) {
+				freeCodegen(codegen);
+				return 0;
+			}
+
+			HashTable* typeTable = hashTable(256);
+
+			if (typeTable == NULL) {
+				freeCodegen(codegen);
+				return 0;
+			}
+
+			if (!pushItem(codegen->scopes, typeTable))  {
+				freeCodegen(codegen);
+				return 0;
+			}
+
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+int generateStackFrames(Codegen* codegen);
+int generateGlobalStatement(Codegen* codegen, Statement* statement) {
+	if (codegen == NULL || statement == NULL) {
+		return 0;
+	}
+
+	if (statement->type != EXPRESSION_STMT || statement->as.expression->type != ASSIGN_EXPR) {
+		fprintf(stderr, "Error: Encountered non Assignment Expression in Global Data Section\n");
+		return 0;
+	}
+
+	switch (statement->as.expression->valueType) {
+		case BOOL_TYPE:
+		case LONG_TYPE: {
+			return generateGlobalAssignment(codegen, statement->as.expression->as.assignment);
+		}
+		case DOUBLE_TYPE:
+			fprintf(stderr, "Error: Did not implement float Types yet :(\n");
+			return 0;
+		default:
+			fprintf(stderr, "Error: Unrecognized Type in generateGlobalStatement\n");
+			return 0;
+	}
+}
+
+int generateGlobalAssignment(Codegen* codegen, Assignment* assignment) {
+	if (codegen == NULL || assignment == NULL) {
+		return 0;
+	}
+
+	ValueType type = assignment->variable->type;
+
+	if (type == UNKNOWN) {
+		fprintf(stderr, "Error: Declarations without Assingment not allowed in global Scope\n");
+	}
+	
+	Value* value = calculateGlobalExpression(assignment->expression);
+
+	if (value == NULL) {
+		fprintf(stderr, "Error: Failed to Calculate Value in generateGlobalAssignment\n");
+		return 0;
+	}
+
+	char* variableId = assignment->variable->id;
+
+	switch (type) {
+		char instr[256];
+		case BOOL_TYPE: {
+			bool val = value->as.b;
+			snprintf(instr, sizeof(instr), "\tsection .data\n\tglobal %s\n\t.align 1\n\t.type %s, @object\n\t.size %s, 1\n%s:\n\tdb %d\n\n", variableId, variableId, variableId, variableId, val);
+			free(value);
+			return addToBuffer(codegen, instr);
+		}
+		case LONG_TYPE: {
+			long long val = value->as.i_64;
+			snprintf(instr, sizeof(instr), "\tsection .data\n\tglobal %s\n\t.align 8\n\t.type %s, @object\n\t.size %s, 8\n%s:\n\tdq %lld\n\n", variableId, variableId, variableId, variableId, val);
+			free(value);
+			return addToBuffer(codegen, instr);
+		}
+		case DOUBLE_TYPE:
+			fprintf(stderr, "Error: Did not implement float Types yet :(\n");
+			free(value);
+			return 0;
+		default:
+			fprintf(stderr, "Error: Unrecognized Type in calculate Expression\n");
+			free(value);
+			return 0;
+	}
+}
+
+Value* calculateGlobalExpression(Expression* expression) {
+	if (expression == NULL) {
+		return NULL;
+	}
+
+	switch (expression->type) {
+		case EXPR_WRAPPER_EXPR:
+			return calculateGlobalExpression(expression->as.expWrap);
+		case ASSIGN_EXPR:
+			fprintf(stderr, "Error: Unexpected Assignment in calculateGlobalExpression\n");
+			return NULL;
+		case UNARY_EXPR: {
+			if (expression->as.unop->type == MINUS) {
+				Value* value = calculateGlobalExpression(expression->as.unop->right);
+				if (value->type == LONG_TYPE) {
+					value->as.i_64 = -value->as.i_64;
+					return value;
+				}
+				free(value);
+				fprintf(stderr, "Error: Unexpected type for Unary Operand -\n");
+				return NULL;
+			}
+			if (expression->as.unop->type == NOT) {
+				Value* value = calculateGlobalExpression(expression->as.unop->right);
+				if (value->type == BOOL_TYPE) {
+					value->as.b = 1 ? value->as.b == 0 : 0;
+					return value;
+				}
+				fprintf(stderr, "Error: Unexpected type for Unary Operand !\n");
+				free(value);
+				return NULL;
+			}
+		}
+		case BINOP_EXPR: {
+			Value* left = calculateGlobalExpression(expression->as.binop->left);
+			Value* right = calculateGlobalExpression(expression->as.binop->right);
+			Value* newValue = addValues(expression->as.binop->type, left, right);
+			if (newValue == NULL) {
+				return NULL;
+			}
+			return newValue;
+		}
+		case VARIABLE_EXPR:
+			fprintf(stderr, "Error: Unexpected Variable in Global Expression\n");
+			return NULL;
+		case VALUE_EXPR: {
+			Value* copiedValue = calloc(1, sizeof(Value));
+			memcpy(copiedValue, expression->as.value, sizeof(Value));
+			return copiedValue;
+		}
+		default:
+			fprintf(stderr, "Error: Unexpected Expression type in generate Expression\n");
+			return 0;
+	}
+}
+
+Value* addValues(BinOperationType binOpType, Value* left, Value* right) {
+	if (left == NULL || right == NULL) {
+		return NULL;
+	}
+
+	Value* res = calloc(1, sizeof(Value));
+
+	if (res == NULL) return NULL;
+
+	switch (binOpType) {
+		case ADD_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand + not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 + right->as.i_64;
+					res->type = LONG_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case SUB_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand - not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 + right->as.i_64;
+					res->type = LONG_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case MUL_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand * not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 * right->as.i_64;
+					res->type = LONG_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case DIV_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand / not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 / right->as.i_64;
+					res->type = LONG_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case MOD_OP:
+			fprintf(stderr, "Error: Operator Modulus not implemented yet\n");
+			return NULL;
+		case ST_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand < not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 < right->as.i_64;
+					res->type = BOOL_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case STE_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand <= not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 <= right->as.i_64;
+					res->type = BOOL_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case GT_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand > not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 > right->as.i_64;
+					res->type = BOOL_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case GTE_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand >= not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 >= right->as.i_64;
+					res->type = BOOL_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case EQ_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand == not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 == right->as.i_64;
+					res->type = BOOL_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		case NEQ_OP:
+			switch (left->type) {
+				case BOOL_TYPE:
+					fprintf(stderr, "Error: Operand != not allowed for type boolean in addValues\n");
+					return NULL;
+				case LONG_TYPE:
+					res->as.i_64 = left->as.i_64 != right->as.i_64;
+					res->type = BOOL_TYPE;
+					break;
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Float type not implemented yet :(\n");
+					return NULL;
+				default:
+					fprintf(stderr, "Error: Unregognized type in addValues\n");
+					return NULL;
+			}
+			break;
+		default:
+			fprintf(stderr, "Error: Encountered illegal Operand in addValues\n");
+			return 0;
+	}
+
+	free(right);
+	free(left);
+	return res;
 }
 
 int generateStatement(Codegen* codegen, Statement* statement) {
