@@ -4,7 +4,7 @@
 #include <string.h>
 #include "utils.h"
 
-DynamicArray *dynamicArray(int growthFactor) {
+DynamicArray *dynamicArray(int growthFactor, GenericFreeFunc freeFunc) {
 	DynamicArray* dynamicArray = (DynamicArray*)malloc(sizeof(DynamicArray));
 
 	if (dynamicArray == NULL) {
@@ -15,6 +15,7 @@ DynamicArray *dynamicArray(int growthFactor) {
 	dynamicArray->growthFactor = growthFactor;
 	dynamicArray->maxSize = INITIAL_CAPACITY; 
 	dynamicArray->size = 0;
+	dynamicArray->freeFunc = freeFunc;
 	dynamicArray->array = malloc(INITIAL_CAPACITY * sizeof(void*));
 
 	if (dynamicArray->array == NULL) {
@@ -105,11 +106,14 @@ void freeArray(DynamicArray* dynamicArray) {
 	if (dynamicArray == NULL) {
 		return;
 	}
+	for (int i = 0; i < dynamicArray->size; i++) {
+		dynamicArray->freeFunc(dynamicArray->array[i]);
+	}
 	free(dynamicArray->array);
 	free(dynamicArray);
 };
 
-HashTable* hashTable(int size) {
+HashTable* hashTable(int size, GenericFreeFunc freeFunc) {
 	int totalSize = sizeof(HashTable) + (size * sizeof(Bucket*));
 	HashTable* table = malloc(totalSize);
 
@@ -119,11 +123,12 @@ HashTable* hashTable(int size) {
 	}
 
 	table->size = size;
+	table->freeFunc = freeFunc;
 	memset(table->array, 0, size * sizeof(Bucket*));
 	return table;
 }
 
-int insertKeyPair(HashTable *table, char *key, int value) {
+int insertKeyPair(HashTable *table, char *key, void* value) {
 	if (table == NULL || key == NULL) {
 		return 0;
 	}
@@ -137,7 +142,7 @@ int insertKeyPair(HashTable *table, char *key, int value) {
 		current = current->next;
 	}
 
-	Bucket* newBucket = malloc(sizeof(Bucket));
+	Bucket* newBucket = calloc(1, sizeof(Bucket));
 
 	if (newBucket == NULL) {
 		fprintf(stderr, "Error: failed to allocate new Bucket");
@@ -150,14 +155,7 @@ int insertKeyPair(HashTable *table, char *key, int value) {
 		return 0;
 	}
 
-	newBucket->box = malloc(sizeof(Box));
-	if (newBucket->box == NULL) {
-		free(newBucket->id);
-		free(newBucket);
-		return 0;
-	}
-	newBucket->box->value = value;
-
+	newBucket->value = value;
 	newBucket->next = table->array[hashedKey];
 	table->array[hashedKey] = newBucket;
 	return 1;
@@ -181,7 +179,7 @@ int containsKey(HashTable* table, char* key) {
 	return 0;
 }
 
-Box* getValue(HashTable* table, char* key) {
+void* getValue(HashTable* table, char* key) {
 	if (table == NULL || key == NULL) {
 		return NULL;
 	}
@@ -191,7 +189,7 @@ Box* getValue(HashTable* table, char* key) {
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
-			return current->box;
+			return current->value;
 		}
 		current = current->next;
 	}
@@ -199,7 +197,7 @@ Box* getValue(HashTable* table, char* key) {
 	return NULL;
 }
 
-int updateKeyPair(HashTable *table, char *key, int value) {
+int updateKeyPair(HashTable *table, char *key, void* value) {
 	if (table == NULL) {
 		return 0;
 	}
@@ -208,7 +206,8 @@ int updateKeyPair(HashTable *table, char *key, int value) {
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
-			current->box->value = value;
+			table->freeFunc(current->value);
+			current->value = value;
 			return 1;
 		}
 		current = current->next;
@@ -237,7 +236,7 @@ void removeKey(HashTable *table, char *key) {
 			}
 
 			free(current->id);
-			free(current->box);
+			table->freeFunc(current->value);
 			free(current);
 			return;
 		}
@@ -246,18 +245,20 @@ void removeKey(HashTable *table, char *key) {
 	}
 }
 
-void freeTable(HashTable *table) {
+void freeTable(void *table) {
 	if (table == NULL) {
 		return;
 	}
 
-	for (int i = 0; i < table->size; i++) {
-		Bucket* current = table->array[i];
+	HashTable* t = (HashTable*) table;
+
+	for (int i = 0; i < t->size; i++) {
+		Bucket* current = t->array[i];
 		Bucket* previous = NULL;
 
 		while (current != NULL) {
 			free(current->id);
-			free(current->box);
+			t->freeFunc(current->value);
 
 			previous = current;
 			current = current->next;

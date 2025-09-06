@@ -9,14 +9,16 @@ typedef struct HashTable HashTable;
 typedef struct Bucket Bucket;
 typedef struct Box Box;
 
+typedef void (*GenericFreeFunc) (void*);
 typedef struct DynamicArray {
 	int growthFactor;
 	int maxSize;
 	int size;
 	void** array;
+	GenericFreeFunc freeFunc;
 } DynamicArray;
 
-DynamicArray* dynamicArray(int growthFactor);
+DynamicArray* dynamicArray(int growthFactor, GenericFreeFunc freeFunc);
 void* getItem(DynamicArray* dynamicArray, int idx);
 void* peekArray(DynamicArray* dynamicArray);
 int pushItem(DynamicArray* dynamicArray, void* item);
@@ -38,25 +40,22 @@ static inline unsigned long hash(unsigned char *str)
 
 struct HashTable {
 	int size;
+	GenericFreeFunc freeFunc;
 	Bucket* array[];
 };
 
 struct Bucket {
 	char* id;
-	Box* box;
+	void* value;
 	Bucket* next;
 };
 
-struct Box {
-	int value;
-};
-
-HashTable* hashTable(int size);
-Box* getValue(HashTable* table, char* key);
-int insertKeyPair(HashTable* table, char* key, int value);
+HashTable* hashTable(int size, GenericFreeFunc freeFunc);
+void* getValue(HashTable* table, char* key);
+int insertKeyPair(HashTable* table, char* key, void* value);
 int containsKey(HashTable* table, char* key);
-int updateKeyPair(HashTable* table, char* key, int value);
+int updateKeyPair(HashTable* table, char* key, void* value);
 void removeKey(HashTable* table, char* key);
-void freeTable(HashTable* table);
+void freeTable(void* table);
 
 #endif

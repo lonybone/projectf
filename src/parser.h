@@ -199,6 +199,6 @@ Parser* initializeParser(char* buffer);
 DynamicArray* parseBuffer(Parser* parser);
 int setParserBuffer(Parser* parser, char* buffer);
 void freeParser(Parser* parser);
-void freeStatement(Statement* statement);
+void freeStatement(void* statement);
 
 #endif

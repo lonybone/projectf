@@ -6,6 +6,7 @@
 
 int checkTypes(TypeChecker* typeChecker);
 int checkStatement(TypeChecker* typeChecker, Statement* statement);
+int checkFunctionStmt(TypeChecker* typeChecker, FunctionStmt* function);
 int checkBlockStmt(TypeChecker* typeChecker, BlockStmt* blockStmt);
 int checkWhileStmt(TypeChecker* typeChecker, WhileStmt* whileStmt);
 int checkIfStmt(TypeChecker* typeChecker, IfStmt* ifStmt);
@@ -32,14 +33,14 @@ TypeChecker* initializeChecker (DynamicArray* ast) {
 	}
 
 	typeChecker->ast = ast;
-	typeChecker->typeScopes = dynamicArray(2);
+	typeChecker->typeScopes = dynamicArray(2, freeTable);
 
 	if (typeChecker->typeScopes == NULL) {
 		freeChecker(typeChecker);
 		return NULL;
 	}
 
-	HashTable* typeTable = hashTable(256);
+	HashTable* typeTable = hashTable(256, free);
 
 	if (typeTable == NULL) {
 		freeChecker(typeChecker);
@@ -69,14 +70,14 @@ int checkTypes(TypeChecker* typeChecker) {
 
 			freeArray(typeChecker->typeScopes);
 
-			typeChecker->typeScopes = dynamicArray(2);
+			typeChecker->typeScopes = dynamicArray(2, freeTable);
 
 			if (typeChecker->typeScopes == NULL) {
 				freeChecker(typeChecker);
 				return 0;
 			}
 
-			HashTable* typeTable = hashTable(256);
+			HashTable* typeTable = hashTable(256, free);
 
 			if (typeTable == NULL) {
 				freeChecker(typeChecker);
@@ -111,7 +112,10 @@ int checkStatement(TypeChecker* typeChecker, Statement* statement) {
 				// variable is not in any scope
 				if (valueType == -1) {
 					HashTable* currentScope = (HashTable*)peekArray(typeChecker->typeScopes);
-					if (!insertKeyPair(currentScope, variable->id, (int)UNKNOWN)) {
+					int* unknownValue = malloc(sizeof(int));
+					if (unknownValue == NULL) return 0;
+					*unknownValue = (int)UNKNOWN;
+					if (!insertKeyPair(currentScope, variable->id, unknownValue)) {
 						fprintf(stderr, "Error: Could not declare variable %s\n", variable->id);
 						return 0;
 					}
@@ -121,6 +125,8 @@ int checkStatement(TypeChecker* typeChecker, Statement* statement) {
 			}
 			return checkExpression(typeChecker, statement->as.expression);
 		}
+		case FUNCTION_STMT:
+			return checkFunctionStmt(typeChecker, statement->as.function);
 		case BLOCK_STMT:
 			return checkBlockStmt(typeChecker, statement->as.blockStmt);
 		case WHILE_STMT:
@@ -190,7 +196,10 @@ ValueType checkAssignment(TypeChecker* typeChecker, Assignment* assignment) {
 		HashTable* currentScope = (HashTable*)peekArray(typeChecker->typeScopes);
 
 		variable->type = expressionType;
-		if(!insertKeyPair(currentScope, variable->id, (int)variable->type)) return -1;
+		int* varType = malloc(sizeof(int));
+		if (varType == NULL) return -1;
+		*varType = (int)variable->type;
+		if(!insertKeyPair(currentScope, variable->id, varType)) return -1;
 	}
 
 	// is in one scope
@@ -200,7 +209,10 @@ ValueType checkAssignment(TypeChecker* typeChecker, Assignment* assignment) {
 		if (variableType == UNKNOWN) {
 
 			variable->type = expressionType;
-			if(!updateKeyPair(varScope, variable->id, variable->type)) return -1;
+			int* varType = malloc(sizeof(int));
+			if (varType == NULL) return -1;
+			*varType = (int)variable->type;
+			if(!updateKeyPair(varScope, variable->id, varType)) return -1;
 		}
 	
 		// type mismatch
@@ -295,7 +307,17 @@ ValueType checkVariable(TypeChecker* typeChecker, Variable* variable) {
 	}
 
 	ValueType type = getVarTypeFromScopes(typeChecker, variable->id);
-	if (type == -1) return -1;
+	if (type == -1) {
+		if (variable->type != UNKNOWN) {
+			HashTable* currentScope = (HashTable*)peekArray(typeChecker->typeScopes);
+
+			int* varType = malloc(sizeof(int));
+			if (varType == NULL) return -1;
+			*varType = (int)variable->type;
+			if(!insertKeyPair(currentScope, variable->id, varType)) return -1;
+		}
+		return -1;
+	}
 	variable->type = type;
 	return type;
 	
@@ -309,12 +331,19 @@ ValueType checkValue(TypeChecker* typeChecker, Value* value) {
 	return value->type;
 }
 
+int checkFunctionStmt(TypeChecker* typeChecker, FunctionStmt* function) {
+	if (typeChecker == NULL || function == NULL) {
+		return 0;
+	}
+	return 0;
+}
+
 int checkBlockStmt(TypeChecker* typeChecker, BlockStmt* blockStmt) {
 	if (typeChecker == NULL || blockStmt == NULL) {
 		return 0;
 	}
 
-	HashTable* blockScope = hashTable(256);
+	HashTable* blockScope = hashTable(256, free);
 
 	if (blockScope == NULL) return 0;
 
@@ -379,9 +408,9 @@ ValueType getVarTypeFromScopes(TypeChecker* typeChecker, char* id) {
 
 	for (int i = 0; i < typeChecker->typeScopes->size; i++) {
 		if (containsKey(typeChecker->typeScopes->array[i], id)) {
-			Box* valueBox = getValue((HashTable*)typeChecker->typeScopes->array[i], id);
-			if (valueBox == NULL) return -1;
-			return (ValueType)valueBox->value;
+			void* value = getValue((HashTable*)typeChecker->typeScopes->array[i], id);
+			if (value == NULL) return -1;
+			return (ValueType)*(int*)(value);
 		}
 	}
 
@@ -404,12 +433,6 @@ HashTable* getVarScope(TypeChecker* typeChecker, char* id) {
 
 void freeChecker(TypeChecker* typeChecker) {
 	if (typeChecker == NULL) return;
-
-	for (int i = 0; i < typeChecker->typeScopes->size; i++) {
-		HashTable* table = (HashTable*)typeChecker->typeScopes->array[i];
-		freeTable(table);
-	}
-
 	freeArray(typeChecker->typeScopes);
 	free(typeChecker);
 }

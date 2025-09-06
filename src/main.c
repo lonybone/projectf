@@ -55,6 +55,7 @@ void printStatement(Statement* stmt, int indent);
 void printExpression(Expression* expr, int indent);
 void printBlockStmt(BlockStmt* block, int indent);
 void printFunctionStmt(FunctionStmt* function, int indent);
+void printFunctionCall(FunctionCall* function, int indent);
 
 // Helper to print indentation
 void printIndent(int indent) {
@@ -96,7 +97,9 @@ void printVariable(Variable* var, int indent) {
 		printf("Variable: (NULL ID)\n");
 	}
 	else {
-		printf("Variable: %s\n", var->id); // Assuming your Variable struct has a char* id
+		printf("Variable: %s\n", var->id);
+		printIndent(indent+1);
+		printf("Type: %d\n", var->type);
 	}
 }
 
@@ -113,6 +116,26 @@ void printValue(Value* val, int indent) {
 	default:
 		printf("Unknown Value/Not Implemented\n");
     }
+}
+
+void printFunctionCall(FunctionCall* function, int indent) {
+	if (!function) return;
+	printIndent(indent);
+	printf("FunctionCall:\n");
+	printIndent(indent+1);
+	printf("Id: %s\n", function->id);
+	printIndent(indent+1);
+	printf("Params:\n");
+	for (int i = 0; i < function->params->size; i++) {
+		printIndent(indent+2);
+		printf("Param %d\n", i);
+		printIndent(indent+3);
+		printf("Id:   %s\n", ((Variable*)(function->params->array[i]))->id);
+		printIndent(indent+3);
+		printf("Type: %d\n", ((Variable*)(function->params->array[i]))->type);
+	}
+	printIndent(indent+1);
+	printf("Return Type: %d\n", function->returnType);
 }
 
 void printAssignment(Assignment* assign, int indent) {
@@ -150,7 +173,7 @@ void printExpression(Expression* expr, int indent) {
 	    printExpression(expr->as.expWrap, indent);
 	    break;
 	case FUNCTIONCALL_EXPR:
-	    printf("FUNCTION_CALL print method NOT IMPLEMENTED YET\n");
+	    printFunctionCall(expr->as.functionCall, indent);
 	    break;
         case BINOP_EXPR:
             printBinOperation(expr->as.binop, indent);
@@ -348,11 +371,6 @@ int main(int argc, char* argv[]) {
 	for (int i = 0; i < ast->size; i++) {
 		printStatement(ast->array[i], 0);
 		printf("\n");
-	}
-
-	for (int i = 0; i < ast->size; i++) {
-		Statement* stmt = (Statement*)ast->array[i];
-		freeStatement(stmt);
 	}
 
 	freeParser(parser);

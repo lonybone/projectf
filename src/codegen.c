@@ -48,7 +48,7 @@ Codegen* initializeCodegen(DynamicArray* ast) {
 		return NULL;
 	}
 
-	codegen->scopes = dynamicArray(2);
+	codegen->scopes = dynamicArray(2, freeTable);
 
 	if (codegen->scopes == NULL) {
 		freeCodegen(codegen);
@@ -125,15 +125,11 @@ int generate(Codegen* codegen) {
 		}
 
 		if (!res) {
-			for (int i = 0; i < codegen->scopes->size; i++) {
-				HashTable* table = (HashTable*)codegen->scopes->array[i];
-				freeTable(table);
-			}
 
 			freeArray(codegen->scopes);
 			free(codegen->buffer);
 
-			codegen->scopes = dynamicArray(2);
+			codegen->scopes = dynamicArray(2, freeTable);
 
 			if (codegen->scopes == NULL) {
 				freeCodegen(codegen);
@@ -147,7 +143,7 @@ int generate(Codegen* codegen) {
 				return 0;
 			}
 
-			HashTable* typeTable = hashTable(256);
+			HashTable* typeTable = hashTable(256, free);
 
 			if (typeTable == NULL) {
 				freeCodegen(codegen);
@@ -641,7 +637,11 @@ int generateAssignment(Codegen* codegen, Assignment* assignment) {
 		variableOffset = codegen->stackOffset;
 
 		HashTable* currentScope = peekArray(codegen->scopes);
-		if (!insertKeyPair(currentScope, assignment->variable->id, variableOffset)) return 0;
+		int* varOffset = malloc(sizeof(int));
+		if (varOffset == NULL) return -1;
+		*varOffset = (int)variableOffset;
+
+		if (!insertKeyPair(currentScope, assignment->variable->id, varOffset)) return 0;
 	}
 
 	char lastInstruction[64];
@@ -711,9 +711,9 @@ int getVariableOffset(Codegen* codegen, char* id) {
 
 	for (int i = 0; i < codegen->scopes->size; i++) {
 		if (containsKey(codegen->scopes->array[i], id)) {
-			Box* valueBox = getValue((HashTable*)codegen->scopes->array[i], id);
-			if (valueBox == NULL) return 0;
-			return valueBox->value;
+			void* value = getValue((HashTable*)codegen->scopes->array[i], id);
+			if (value == NULL) return 0;
+			return (ValueType)*(int*)value;
 		}
 	}
 
@@ -770,12 +770,6 @@ void freeCodegen(Codegen* codegen) {
 	if (codegen == NULL) {
 		return;
 	}
-
-	for (int i = 0; i < codegen->scopes->size; i++) {
-		HashTable* table = (HashTable*)codegen->scopes->array[i];
-		freeTable(table);
-	}
-	
 	freeArray(codegen->scopes);
 	free(codegen->buffer);
 	free(codegen);
