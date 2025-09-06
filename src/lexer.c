@@ -204,33 +204,39 @@ Token* getToken(Lexer* lexer) {
 					break;
 				}
 
-				if (buff[lexer->idx] == 'i' && buff[lexer->idx+1] == 'n' && buff[lexer->idx+2] == 't' && !isalnum(buff[lexer->idx+3])) {
-					token->type = INT;
+				if (buff[lexer->idx] == 'b' && buff[lexer->idx+1] == 'o' && buff[lexer->idx+2] == 'o' && buff[lexer->idx+3] == 'l' && !isalnum(buff[lexer->idx+4])) {
+					token->type = BOOL;
+					token->length = 4;
+					break;
+				}
+
+				if (buff[lexer->idx] == 'i' && buff[lexer->idx+1] == '1' && buff[lexer->idx+2] == '6') {
+					token->type = I16;
 					token->length = 3;
 					break;
 				}
 
-				if (buff[lexer->idx] == 'l' && buff[lexer->idx+1] == 'o' && buff[lexer->idx+2] == 'n' && buff[lexer->idx+3] == 'g' && !isalnum(buff[lexer->idx+4])) {
-					token->type = LONG;
-					token->length = 4;
-					break;
-				}
-				
-				if (buff[lexer->idx] == 'f' && buff[lexer->idx+1] == 'l' && buff[lexer->idx+2] == 'o' && buff[lexer->idx+3] == 'a' && buff[lexer->idx+4] == 't' && !isalnum(buff[lexer->idx+5])) {
-					token->type = FLOAT;
-					token->length = 5;
+				if (buff[lexer->idx] == 'i' && buff[lexer->idx+1] == '3' && buff[lexer->idx+2] == '2') {
+					token->type = I32;
+					token->length = 3;
 					break;
 				}
 
-				if (buff[lexer->idx] == 'd' && buff[lexer->idx+1] == 'o' && buff[lexer->idx+2] == 'u' && buff[lexer->idx+3] == 'b' && buff[lexer->idx+4] == 'l' && buff[lexer->idx+5] == 'e' && !isalnum(buff[lexer->idx+6])) {
-					token->type = DOUBLE;
-					token->length = 6;
+				if (buff[lexer->idx] == 'i' && buff[lexer->idx+1] == '6' && buff[lexer->idx+2] == '4') {
+					token->type = I64;
+					token->length = 3;
 					break;
 				}
 
-				if (buff[lexer->idx] == 'b' && buff[lexer->idx+1] == 'o' && buff[lexer->idx+2] == 'o' && buff[lexer->idx+3] == 'l' && !isalnum(buff[lexer->idx+4])) {
-					token->type = BOOL;
-					token->length = 4;
+				if (buff[lexer->idx] == 'f' && buff[lexer->idx+1] == '3' && buff[lexer->idx+2] == '2') {
+					token->type = F32;
+					token->length = 3;
+					break;
+				}
+
+				if (buff[lexer->idx] == 'f' && buff[lexer->idx+1] == '6' && buff[lexer->idx+2] == '4') {
+					token->type = F64;
+					token->length = 3;
 					break;
 				}
 
@@ -243,6 +249,12 @@ Token* getToken(Lexer* lexer) {
 				if (buff[lexer->idx] == 's' && buff[lexer->idx+1] == 't' && buff[lexer->idx+2] == 'r' && !isalnum(buff[lexer->idx+3])) {
 					token->type = STR;
 					token->length = 3;
+					break;
+				}
+
+				if (buff[lexer->idx] == 'r' && buff[lexer->idx+1] == 'e' && buff[lexer->idx+2] == 't' && buff[lexer->idx+3] == 'u' && buff[lexer->idx+4] == 'r' && buff[lexer->idx+5] == 'n' && !isalnum(buff[lexer->idx+6])) {
+					token->type = RETURN;
+					token->length = 6;
 					break;
 				}
 

@@ -9,7 +9,10 @@ struct DynamicArray;
 
 typedef struct Parser Parser;
 typedef struct Statement Statement;
+typedef struct FunctionStmt FunctionStmt;
+typedef struct FunctionCall FunctionCall;
 typedef struct BlockStmt BlockStmt;
+typedef struct ReturnStmt ReturnStmt;
 typedef struct Expression Expression;
 typedef struct BinOperation BinOperation;
 typedef struct UnaryOperation UnaryOperation;
@@ -27,15 +30,18 @@ typedef enum {
 
 typedef enum {
 	EXPRESSION_STMT,
+	FUNCTION_STMT,
 	BLOCK_STMT,
 	WHILE_STMT,
 	IF_STMT,
+	RETURN_STMT,
 	DECLARATION_STMT,
 	E_O_F_STMT
 } StatementType;
 
 typedef enum {
 	EXPR_WRAPPER_EXPR,
+	FUNCTIONCALL_EXPR,
 	ASSIGN_EXPR,
 	BINOP_EXPR,
 	UNARY_EXPR,
@@ -85,15 +91,35 @@ struct Statement {
 	StatementType type;
 	union {
 		Expression* expression;
+		FunctionStmt* function;
 		BlockStmt* blockStmt;
 		WhileStmt* whileStmt;
 		IfStmt* ifStmt;
+		ReturnStmt* returnStmt;
 		Declaration* declaration;
 	} as;
 };
 
+struct FunctionStmt {
+	char* id;
+	HashTable* scope;
+	DynamicArray* params;
+	BlockStmt* blockStmt;
+	ValueType returnType;
+};
+
+struct FunctionCall {
+	char* id;
+	DynamicArray* params;
+	ValueType returnType;
+};
+
 struct BlockStmt {
 	struct DynamicArray* stmts;
+};
+
+struct ReturnStmt {
+	Expression* expression;
 };
 
 struct Expression {
@@ -101,6 +127,7 @@ struct Expression {
 	ValueType valueType;
 	union {
 		Expression* expWrap;
+		FunctionCall* functionCall;
 		BinOperation* binop;
 		UnaryOperation* unop;
 		Assignment* assignment;
@@ -151,6 +178,7 @@ struct Declaration {
 struct Variable {
 	ValueType type;
 	char* id;
+	int offset;
 };
 
 struct Value {

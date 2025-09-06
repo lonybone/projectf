@@ -54,6 +54,7 @@ char* readFileToBuffer(char* filepath) {
 void printStatement(Statement* stmt, int indent);
 void printExpression(Expression* expr, int indent);
 void printBlockStmt(BlockStmt* block, int indent);
+void printFunctionStmt(FunctionStmt* function, int indent);
 
 // Helper to print indentation
 void printIndent(int indent) {
@@ -148,6 +149,9 @@ void printExpression(Expression* expr, int indent) {
 	case EXPR_WRAPPER_EXPR:
 	    printExpression(expr->as.expWrap, indent);
 	    break;
+	case FUNCTIONCALL_EXPR:
+	    printf("FUNCTION_CALL print method NOT IMPLEMENTED YET\n");
+	    break;
         case BINOP_EXPR:
             printBinOperation(expr->as.binop, indent);
             break;
@@ -197,7 +201,7 @@ void printWhileStmt(WhileStmt* whileStmt, int indent) {
     if (!whileStmt) return;
     printIndent(indent);
     printf("WhileStmt:\n");
-    
+
     printIndent(indent + 1);
     printf("Condition:\n");
     printExpression(whileStmt->condition, indent + 2);
@@ -216,6 +220,27 @@ void printBlockStmt(BlockStmt* block, int indent) {
     }
 }
 
+void printFunctionStmt(FunctionStmt* function, int indent) {
+	if (!function) return;
+	printIndent(indent);
+	printf("FunctionStmt:\n");
+	printIndent(indent+1);
+	printf("Id: %s\n", function->id);
+	printIndent(indent+1);
+	printf("Params:\n");
+	for (int i = 0; i < function->params->size; i++) {
+		printIndent(indent+2);
+		printf("Param %d\n", i);
+		printIndent(indent+3);
+		printf("Id:   %s\n", ((Variable*)(function->params->array[i]))->id);
+		printIndent(indent+3);
+		printf("Type: %d\n", ((Variable*)(function->params->array[i]))->type);
+	}
+	printBlockStmt(function->blockStmt, indent+1);
+	printIndent(indent+1);
+	printf("Return Type: %d\n", function->returnType);
+}
+
 void printStatement(Statement* stmt, int indent) {
     if (!stmt) return;
     switch (stmt->type) {
@@ -226,6 +251,9 @@ void printStatement(Statement* stmt, int indent) {
 	    printf("Expression Valuetype: %d\n", stmt->as.expression->valueType);
             printExpression(stmt->as.expression, indent + 1);
             break;
+	case FUNCTION_STMT:
+	    printFunctionStmt(stmt->as.function, indent);
+	    break;
         case BLOCK_STMT:
             printBlockStmt(stmt->as.blockStmt, indent);
             break;
@@ -235,6 +263,11 @@ void printStatement(Statement* stmt, int indent) {
         case IF_STMT:
             printIfStmt(stmt->as.ifStmt, indent);
             break;
+	case RETURN_STMT:
+	    printIndent(indent);
+	    printf("ReturnStmt:\n");
+	    printExpression(stmt->as.returnStmt->expression, indent+1);
+	    break;
         // Add other statement types like DECLARATION_STMT if needed
         default:
             printIndent(indent);
@@ -270,6 +303,7 @@ int main(int argc, char* argv[]) {
 	
 	printf("Parsing Success!\n");
 
+	/*
 	TypeChecker* typeChecker = initializeChecker(ast);
 
 	if (typeChecker == NULL) {
@@ -307,9 +341,9 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	printf("Generation Success!\n");
-
+	printf("Generation Success!\n\n");
 	writeToFile(codegen, "compiled_test.txt");
+	*/
 
 	for (int i = 0; i < ast->size; i++) {
 		printStatement(ast->array[i], 0);
@@ -322,8 +356,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	freeParser(parser);
-	freeChecker(typeChecker);
-	freeCodegen(codegen);
+	//freeChecker(typeChecker);
+	//freeCodegen(codegen);
 	freeArray(ast);
 	free(buffer);
 }

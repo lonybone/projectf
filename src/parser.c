@@ -6,30 +6,35 @@
 #include "utils.h"
 
 Statement* parseStatement(Parser* parser);
+FunctionStmt* parseFunctionStmt(Parser* parser, Token* typeToken, Token* idToken);
+BlockStmt* parseBlockStmt(Parser* parser);
+WhileStmt* parseWhileStmt(Parser* parser);
+IfStmt* parseIfStmt(Parser* parser);
 Expression* parseExpression(Parser* parser, int minPrecedence);
 Expression* parsePrimaryExpression(Parser* parser);
 Expression* parseExpression_V2(Parser* parser);
 Expression* parseExpressionToAst(Parser* parser);
 Expression* descent(Expression* this);
+FunctionCall* parseFunctionCall(Parser* parser, Token* idToken);
 BinOperation* parseBinOperation(BinOperationType type, Expression* left, Expression* right);
 UnaryOperation* parseUnaryOperation(TokenType type, Expression* right);
-BlockStmt* parseBlockStmt(Parser* parser);
-WhileStmt* parseWhileStmt(Parser* parser);
-IfStmt* parseIfStmt(Parser* parser);
 Assignment* parseAssignment(Variable* variable, Expression* expression);
 Declaration* parseDeclaration(); // not implemented
 Value* parseValue(Token* token);
 Variable* parseVariable(Token* token);
 
 void freeStatement(Statement* statement);
+void freeFunctionStmt(FunctionStmt* functionStmt);
 void freeBlockStmt(BlockStmt* block);
 void freeExpression(Expression* expression);
 void freeBinOperation(BinOperation* binOperation);
 void freeUnaryOperation(UnaryOperation* unaryOperation);
+void freeFunctionCall(FunctionCall* functionCall);
 void freeBlockStmt(BlockStmt* blockStmt);
 void freeWhileStmt(WhileStmt* whileStmt);
 void freeIfStmt(IfStmt* ifStmt);
 void freeAssignment(Assignment* assignment);
+void freeReturnStmt(ReturnStmt* returnStmt);
 void freeDeclaration(Declaration* declaration);
 void freeVariable(Variable* variable);
 void freeValue(Value* value);
@@ -136,6 +141,37 @@ static int getBinOpPrecedence(TokenType type) {
         default:
             return 0;
     }
+}
+
+static ValueType getTypeFromToken(Token* token) {
+	switch (token->type) {
+		case BOOL:
+			return BOOL_TYPE;
+			break;
+		case I16:
+			return INT_TYPE;
+			break;
+		case I32:
+			return LONG_TYPE;
+			break;
+		case I64:
+			return LONG_LONG_TYPE;
+			break;
+		case F32:
+			return FLOAT_TYPE;
+			break;
+		case F64:
+			return DOUBLE_TYPE;
+			break;
+		case CHAR:
+			return CHAR_TYPE;
+			break;
+		case STR:
+			return STR_TYPE;
+			break;
+		default:
+			return -1;
+	}
 }
 
 static int getExpressionPrecedence(Expression* expression) {
@@ -286,10 +322,100 @@ Statement* parseStatement(Parser* parser) {
 			
 			break;
 
+		case BOOL:
+		case I16:
+		case I32:
+		case I64:
+		case F32:
+		case F64:
+		case CHAR:
+		case STR: {
+			Token* typeToken = calloc(1, sizeof(Token));
+			if (typeToken == NULL) return NULL;
+			memcpy(typeToken, token, sizeof(Token));
+
+			advanceToken(parser->lexer);
+
+			Token* idToken = calloc(1, sizeof(Token));
+			if (idToken == NULL) return NULL;
+			memcpy(idToken, peekToken(parser->lexer), sizeof(Token));
+
+			advanceToken(parser->lexer);
+
+			if (idToken->type != ID) {
+				fprintf(stderr, "Error: Unexpected Token %d after Type Annotation\n", idToken->type);
+				free(idToken);
+				free(typeToken);
+				goto error;
+			}
+
+			Token* lParenToken = calloc(1, sizeof(Token));
+			if (lParenToken == NULL) {
+				free(idToken);
+				free(typeToken);
+				free(lParenToken);
+				goto error;
+			}
+			memcpy(lParenToken, peekToken(parser->lexer), sizeof(Token));
+
+			advanceToken(parser->lexer);
+
+			if (lParenToken->type == LPAREN) {
+				statement->type = FUNCTION_STMT;
+				statement->as.function = parseFunctionStmt(parser, typeToken, idToken);
+
+				if (statement->as.function == NULL) {
+					free(idToken);
+					free(typeToken);
+					free(lParenToken);
+					goto error;
+				}
+			}
+
+			else {
+				statement->type = EXPRESSION_STMT;
+				statement->as.expression->type = ASSIGN_EXPR;
+
+				if (peekToken(parser->lexer)->type != ASSIGN) {
+					fprintf(stderr, "Error: Unexpected Token after Annotated Declaration\n");
+					free(idToken);
+					free(typeToken);
+					free(lParenToken);
+					goto error;
+				}
+
+				statement->as.expression->as.assignment->variable = calloc(1, sizeof(Variable));
+				char* tokenStr = parseToken(idToken);
+				if (idToken == NULL) goto error;
+				statement->as.expression->as.assignment->variable->id = tokenStr;
+
+				ValueType variableType = getTypeFromToken(typeToken);
+
+				statement->as.expression->as.assignment->variable->type = variableType;
+				if (parser->version == V1_PRATT) {
+					statement->as.expression->as.assignment->expression = parseExpression(parser, 0);
+				}
+				else {
+					statement->as.expression->as.assignment->expression = parseExpression_V2(parser);
+				}
+
+				if (statement->as.expression->as.assignment->expression == NULL) {
+					free(idToken);
+					free(typeToken);
+					free(lParenToken);
+					goto error;
+				}
+			}
+
+			free(idToken);
+			free(typeToken);
+			free(lParenToken);
+			break;
+		}
 		case ID:
 		case NUM:
 		case FNUM:
-		case LPAREN:
+		case LPAREN: {
 			statement->type = EXPRESSION_STMT;
 			Expression* expression;
 
@@ -305,13 +431,38 @@ Statement* parseStatement(Parser* parser) {
 			}
 
 			expression->valueType = UNKNOWN;
-
 			statement->as.expression = expression;
-			
 			break;
+		}
+		case RETURN: {
+			advanceToken(parser->lexer);
 
+			statement->as.returnStmt = calloc(1, sizeof(ReturnStmt));
+			statement->type = RETURN_STMT;
+
+			if (statement->as.returnStmt == NULL) {
+				goto error;
+			}
+
+			Expression* expression;
+
+			if (parser->version == V1_PRATT) {
+				expression = parseExpression(parser, 0);
+			}
+			else {
+				expression = parseExpression_V2(parser);
+			}
+
+			if (expression == NULL) {
+				goto error;
+			}
+
+			expression->valueType = UNKNOWN;
+			statement->as.returnStmt->expression = expression;
+			break;
+		}
 		default: {
-			fprintf(stderr,"Error: unexpected token in Statement of type %d\n", token->type);
+			fprintf(stderr,"Error: Unexpected Token in Statement of type %d\n", token->type);
 			goto error;
 		}
 
@@ -403,15 +554,37 @@ Expression* parsePrimaryExpression(Parser* parser) {
 			}
 
 			expression->valueType = UNKNOWN;
-			expression->type = VARIABLE_EXPR;
-			expression->as.variable = parseVariable(token);
 
-			if (expression->as.variable == NULL) {
-				goto error;
+			Token* idToken = calloc(1, sizeof(Token));
+			if (idToken == NULL) return NULL;
+			memcpy(idToken, peekToken(parser->lexer), sizeof(Token));
+
+
+			if (peekToken(parser->lexer)->type == LPAREN) {
+				advanceToken(parser->lexer);
+				expression->type = FUNCTIONCALL_EXPR;
+				expression->as.functionCall = parseFunctionCall(parser, idToken);
+
+				if (expression->as.functionCall == NULL) {
+					free(idToken);
+					goto error;
+				}
+			}
+			else {
+				expression->type = VARIABLE_EXPR;
+				expression->as.variable = parseVariable(token);
+
+				if (expression->as.variable == NULL) {
+					free(idToken);
+					goto error;
+				}
+
+				advanceToken(parser->lexer);
 			}
 
-			advanceToken(parser->lexer);
+			free(idToken);
 			break;
+
 		case LPAREN:
 			advanceToken(parser->lexer);
 
@@ -736,6 +909,95 @@ UnaryOperation* parseUnaryOperation(TokenType type, Expression* right) {
 	return unaryOperation;
 }
 
+FunctionStmt* parseFunctionStmt(Parser* parser, Token* typeToken, Token* idToken) {
+	if (parser == NULL || typeToken == NULL || idToken == NULL) {
+		return NULL;
+	}
+
+	FunctionStmt* function = calloc(1, sizeof(FunctionStmt));
+
+	if (function == NULL) {
+		return NULL;
+	}
+
+	function->returnType = getTypeFromToken(typeToken);
+	function->id = parseToken(idToken);
+	function->params = dynamicArray(2);
+	
+	if (function->id == NULL || function->params == NULL) {
+		return NULL;
+	}
+
+	while (1) {
+		if (peekToken(parser->lexer)->type == RPAREN) {
+			advanceToken(parser->lexer);
+			break;
+		}
+
+		Token* paramType = calloc(1, sizeof(Token));
+		if (paramType == NULL) return NULL;
+		memcpy(paramType, peekToken(parser->lexer), sizeof(Token));
+
+		if (getTypeFromToken(paramType) == -1) {
+			fprintf(stderr, "Error: Expected Type Token but got %d instead\n", paramType->type);
+			free(paramType);
+			freeFunctionStmt(function);
+			return NULL;
+		}
+
+		advanceToken(parser->lexer);
+
+		Token* paramId = calloc(1, sizeof(Token));
+		if (paramId == NULL) return NULL;
+		memcpy(paramId, peekToken(parser->lexer), sizeof(Token));
+
+		advanceToken(parser->lexer);
+
+		if (paramId->type != ID) {
+			fprintf(stderr, "Error: Type Token isn't followed by ID Token\n");
+			free(paramType);
+			free(paramId);
+			freeFunctionStmt(function);
+			return NULL;
+		}
+
+		Variable* param = parseVariable(paramId);
+		param->type = getTypeFromToken(paramType);
+		pushItem(function->params, param);
+
+		free(paramType);
+		free(paramId);
+
+		if (peekToken(parser->lexer)->type == RPAREN) {
+			advanceToken(parser->lexer);
+			break;
+		}
+
+		if (peekToken(parser->lexer)->type != COLON) {
+			fprintf(stderr, "Error: Expected Token ',' after a Function Argument\n");
+			freeFunctionStmt(function);
+			return NULL;
+		}
+
+		advanceToken(parser->lexer);
+	}
+
+	if (peekToken(parser->lexer)->type != LCURL) {
+		fprintf(stderr, "Error: Expected Token '}' after a Function Arguments\n");
+		freeFunctionStmt(function);
+		return NULL;
+	}
+	advanceToken(parser->lexer);
+
+	function->blockStmt = parseBlockStmt(parser);
+	if (function->blockStmt == NULL) {
+		freeFunctionStmt(function);
+		return NULL;
+	}
+
+	return function;
+}
+
 BlockStmt* parseBlockStmt(Parser* parser) {
 
 	if (parser == NULL) {
@@ -899,6 +1161,11 @@ IfStmt* parseIfStmt(Parser* parser) {
 	return ifStmt;
 }
 
+FunctionCall* parseFunctionCall(Parser* parser, Token* idToken) {
+	fprintf(stderr, "FUNCTION CALL NOT IMPLEMENTED YET\n");
+	return NULL;
+}
+
 Assignment* parseAssignment(Variable* variable, Expression* expression) {
 	Assignment* assignment = calloc(1, sizeof(Assignment));
 	
@@ -969,6 +1236,9 @@ void freeStatement(Statement* statement) {
 		case EXPRESSION_STMT:
 			freeExpression(statement->as.expression);
 			break;
+		case FUNCTION_STMT:
+			freeFunctionStmt(statement->as.function);
+			break;
 		case BLOCK_STMT:
 			freeBlockStmt(statement->as.blockStmt);
 			break;
@@ -980,6 +1250,9 @@ void freeStatement(Statement* statement) {
 			break;
 		case DECLARATION_STMT:
 			freeDeclaration(statement->as.declaration);
+			break;
+		case RETURN_STMT:
+			freeReturnStmt(statement->as.returnStmt);
 			break;
 		case E_O_F_STMT:
 			break;
@@ -1013,6 +1286,9 @@ void freeExpression(Expression* expression) {
 		case EXPR_WRAPPER_EXPR:
 			freeExpression(expression->as.expWrap);
 			break;
+		case FUNCTIONCALL_EXPR:
+			freeFunctionCall(expression->as.functionCall);
+			break;
 		case BINOP_EXPR:
 			freeBinOperation(expression->as.binop);
 			break;
@@ -1027,8 +1303,6 @@ void freeExpression(Expression* expression) {
 			break;
 		case VALUE_EXPR:
 			freeValue(expression->as.value);
-			break;
-		default:
 			break;
 		
 	}
@@ -1055,6 +1329,21 @@ void freeUnaryOperation(UnaryOperation* unaryOperation) {
 
 	freeExpression(unaryOperation->right);
 	free(unaryOperation);
+}
+
+void freeFunctionStmt(FunctionStmt* functionStmt) {
+	if (functionStmt == NULL) {
+		return;
+	}
+
+	free(functionStmt->id);
+	for (int i = 0; i < functionStmt->params->size; i++) {
+		Variable* var = (Variable*)functionStmt->params->array[i];
+		freeVariable(var);
+	}
+	freeArray(functionStmt->params);
+	freeBlockStmt(functionStmt->blockStmt);
+	free(functionStmt);
 }
 
 void freeWhileStmt(WhileStmt* whileStmt) {
@@ -1085,6 +1374,26 @@ void freeIfStmt(IfStmt* ifStmt) {
 	}
 
 	free(ifStmt);
+}
+
+void freeReturnStmt(ReturnStmt* returnStmt) {
+	if (returnStmt == NULL) {
+		return;
+	}
+	freeExpression(returnStmt->expression);
+	free(returnStmt);
+}
+
+void freeFunctionCall(FunctionCall* functionCall) {
+	if (functionCall == NULL) {
+		return;
+	}
+	for (int i = 0; i < functionCall->params->size; i++) {
+		Variable* var = (Variable*)functionCall->params->array[i];
+		freeVariable(var);
+	}
+	freeArray(functionCall->params);
+	free(functionCall);
 }
 
 void freeAssignment(Assignment* assignment) {
