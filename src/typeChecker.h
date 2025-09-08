@@ -7,6 +7,7 @@ typedef struct TypeChecker TypeChecker;
 struct TypeChecker {
 	DynamicArray* ast;
 	DynamicArray* typeScopes;
+	HashTable* functions;
 };
 
 TypeChecker* initializeChecker (DynamicArray* ast);

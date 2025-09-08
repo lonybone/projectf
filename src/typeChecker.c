@@ -3,14 +3,17 @@
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int checkTypes(TypeChecker* typeChecker);
 int checkStatement(TypeChecker* typeChecker, Statement* statement);
 int checkFunctionStmt(TypeChecker* typeChecker, FunctionStmt* function);
-int checkBlockStmt(TypeChecker* typeChecker, BlockStmt* blockStmt);
+int checkBlockStmt(TypeChecker* typeChecker, BlockStmt* blockStmt, HashTable* scope);
 int checkWhileStmt(TypeChecker* typeChecker, WhileStmt* whileStmt);
 int checkIfStmt(TypeChecker* typeChecker, IfStmt* ifStmt);
+int checkReturnStmt(TypeChecker* typeChecker, ReturnStmt* returnStmt);
 int checkExpression(TypeChecker* typeChecker, Expression* expression);
+ValueType checkFunctionCall(TypeChecker* typeChecker, FunctionCall* function);
 ValueType checkAssignment(TypeChecker* typeChecker, Assignment* assignment);
 ValueType checkBinOperation(TypeChecker* typeChecker, BinOperation* binOperation);
 ValueType checkUnaryOperation(TypeChecker* typeChecker, UnaryOperation* unaryOperation);
@@ -52,6 +55,15 @@ TypeChecker* initializeChecker (DynamicArray* ast) {
 		return NULL;
 	}
 
+	HashTable* functions = hashTable(256, NULL);
+
+	if (functions == NULL) {
+		freeChecker(typeChecker);
+		return NULL;
+	}
+
+	typeChecker->functions = functions;
+
 	return typeChecker;
 }
 
@@ -63,16 +75,13 @@ int checkTypes(TypeChecker* typeChecker) {
 
 	for (int i = 0; i < typeChecker->ast->size; i++) {
 		if (!checkStatement(typeChecker, typeChecker->ast->array[i])) { 
-			for (int i = 0; i < typeChecker->typeScopes->size; i++) {
-				HashTable* table = (HashTable*)typeChecker->typeScopes->array[i];
-				freeTable(table);
-			}
 
 			freeArray(typeChecker->typeScopes);
-
+			freeTable(typeChecker->functions);
 			typeChecker->typeScopes = dynamicArray(2, freeTable);
+			typeChecker->functions = hashTable(256, NULL);
 
-			if (typeChecker->typeScopes == NULL) {
+			if (typeChecker->typeScopes == NULL || typeChecker->functions == NULL) {
 				freeChecker(typeChecker);
 				return 0;
 			}
@@ -128,11 +137,13 @@ int checkStatement(TypeChecker* typeChecker, Statement* statement) {
 		case FUNCTION_STMT:
 			return checkFunctionStmt(typeChecker, statement->as.function);
 		case BLOCK_STMT:
-			return checkBlockStmt(typeChecker, statement->as.blockStmt);
+			return checkBlockStmt(typeChecker, statement->as.blockStmt, NULL);
 		case WHILE_STMT:
 			return checkWhileStmt(typeChecker, statement->as.whileStmt);
 		case IF_STMT:
 			return checkIfStmt(typeChecker, statement->as.ifStmt);
+		case RETURN_STMT:
+			return checkReturnStmt(typeChecker, statement->as.returnStmt);
 		case DECLARATION_STMT:
 		default:
 			fprintf(stderr, "Error: unexpected Statement type in checkStatement\n");
@@ -149,6 +160,9 @@ int checkExpression(TypeChecker* typeChecker, Expression* expression) {
 	switch (expression->type) {
 		case EXPR_WRAPPER_EXPR:
 			typeResult = checkExpression(typeChecker, expression->as.expWrap);
+			break;
+		case FUNCTIONCALL_EXPR:
+			typeResult = checkFunctionCall(typeChecker, expression->as.functionCall);
 			break;
 		case ASSIGN_EXPR:
 			typeResult = checkAssignment(typeChecker, expression->as.assignment);
@@ -170,12 +184,47 @@ int checkExpression(TypeChecker* typeChecker, Expression* expression) {
 			return 0;
 	}
 
-	// variable expressions are allowed to be declared on their own
-	if (typeResult == -1 && expression->type != VARIABLE_EXPR) {
+	if (typeResult == -1) {
 		return 0;
 	}
+
 	expression->valueType = typeResult;
 	return 1;
+}
+
+ValueType checkFunctionCall(TypeChecker* typeChecker, FunctionCall* function) {
+	if (typeChecker == NULL || function == NULL) {
+		return -1;
+	}
+
+	FunctionStmt* functionStmt = getValue(typeChecker->functions, function->id);
+
+	if (functionStmt == NULL) {
+		fprintf(stderr, "Error: Unexpected call to undeclared Function \"%s\"\n", function->id);
+		return -1;
+	}
+
+	function->returnType = functionStmt->returnType;
+
+	for (int i = 0; i < function->params->size; i++) {
+		if (i >= functionStmt->params->size) {
+			fprintf(stderr, "Error: Too many Arguments for Function call \"%s\": required: %d, but got %d\n", function->id, functionStmt->params->size, function->params->size);
+			return -1;
+		}
+
+		Expression* param = (Expression*)function->params->array[i];
+		if (!checkExpression(typeChecker, param)) return -1;
+		ValueType paramType = param->valueType;
+		if (paramType == -1) return -1;
+
+		ValueType shouldParamType = ((Variable*)functionStmt->params->array[i])->type;
+		if (paramType != shouldParamType) {
+			fprintf(stderr, "Error: Argument %d of Function Call \"%s\" has type %d but should have type %d\n", i, function->id, paramType, shouldParamType);
+			return -1;
+		}
+	}
+
+	return function->returnType;
 }
 
 // check if variable already has a type, if so then check wether expression is of same type
@@ -195,7 +244,17 @@ ValueType checkAssignment(TypeChecker* typeChecker, Assignment* assignment) {
 	if (variableType == -1) {
 		HashTable* currentScope = (HashTable*)peekArray(typeChecker->typeScopes);
 
-		variable->type = expressionType;
+		// type needs to be inferred
+		if (variable->type == UNKNOWN) {
+			variable->type = expressionType;
+		}
+		// variable needs to be checked
+		else {
+			if (variable->type != expressionType) {
+				fprintf(stderr, "Error: Variable %s was annotated type %d but got assigned type %d\n", variable->id, variable->type, expressionType);
+				return -1;
+			}
+		}
 		int* varType = malloc(sizeof(int));
 		if (varType == NULL) return -1;
 		*varType = (int)variable->type;
@@ -296,7 +355,7 @@ ValueType checkUnaryOperation(TypeChecker* typeChecker, UnaryOperation* unaryOpe
 			return DOUBLE_TYPE;
 		}
 	}
-	fprintf(stderr, "Error: Tried To apply Operator %d on Expression on type %d\n", MINUS, unaryOperation->right->valueType);
+	fprintf(stderr, "Error: Tried To apply Operator %d on Expression on type %d\n", unaryOperation->type, unaryOperation->right->valueType);
 	return -1;
 }
 // if the variable has a type then just return
@@ -315,7 +374,9 @@ ValueType checkVariable(TypeChecker* typeChecker, Variable* variable) {
 			if (varType == NULL) return -1;
 			*varType = (int)variable->type;
 			if(!insertKeyPair(currentScope, variable->id, varType)) return -1;
+			return *varType;
 		}
+		fprintf(stderr, "Error: Tried to Access Uninitialized Variable %s\n", variable->id);
 		return -1;
 	}
 	variable->type = type;
@@ -335,15 +396,72 @@ int checkFunctionStmt(TypeChecker* typeChecker, FunctionStmt* function) {
 	if (typeChecker == NULL || function == NULL) {
 		return 0;
 	}
-	return 0;
+
+	if (typeChecker->typeScopes->size != 1) {
+		fprintf(stderr, "Error: Function Declarations only allowed in Global Scope\n");
+		return 0;
+	}
+
+	if (containsKey(typeChecker->functions, function->id)) {
+		fprintf(stderr, "Error: Already Declared Function is Declared again\n");
+		return 0;
+	}
+
+	if (!insertKeyPair(typeChecker->functions, function->id, function)) return 0;
+
+	HashTable* newScope = hashTable(256, free);
+	if (newScope == NULL) return 0;
+
+	for (int i = 0; i < function->params->size; i++) {
+		char* varId = ((Variable*)(function->params->array[i]))->id;
+
+		if (getVarTypeFromScopes(typeChecker, varId) != -1) {
+			freeTable(newScope);
+			fprintf(stderr, "Error: In Function %s: Shadowing Globals with Function Prameters is not allowed\n", function->id);
+			return 0;
+		}
+
+		int* varType = malloc(sizeof(int));
+		if (varType == NULL) return -1;
+		*varType = ((Variable*)(function->params->array[i]))->type;
+		if (!insertKeyPair(newScope, varId, varType)) {
+			freeTable(newScope);
+			return 0;
+		}
+	}
+
+	if (!checkBlockStmt(typeChecker, function->blockStmt, newScope)) {
+		return 0;
+	}
+
+	Statement* lastStatement = ((Statement*)(function->blockStmt->stmts->array[function->blockStmt->stmts->size-1]));
+
+	if (lastStatement == NULL || lastStatement->type != RETURN_STMT) {
+		fprintf(stderr, "Error: In Function %s: Function is missing Return Statement\n", function->id);
+		return 0;
+	}
+
+	if (lastStatement->as.returnStmt->expression->valueType != function->returnType) {
+		fprintf(stderr, "Error: In Function %s: Returned Value in %s does not match its Return Type\n", function->id, function->id);
+		return 0;
+	}
+
+	return 1;
 }
 
-int checkBlockStmt(TypeChecker* typeChecker, BlockStmt* blockStmt) {
+int checkBlockStmt(TypeChecker* typeChecker, BlockStmt* blockStmt, HashTable* scope) {
 	if (typeChecker == NULL || blockStmt == NULL) {
 		return 0;
 	}
 
-	HashTable* blockScope = hashTable(256, free);
+	HashTable* blockScope;
+
+	if (scope != NULL) {
+		blockScope = scope;
+	}
+	else {
+		blockScope = hashTable(256, free);
+	}
 
 	if (blockScope == NULL) return 0;
 
@@ -353,7 +471,10 @@ int checkBlockStmt(TypeChecker* typeChecker, BlockStmt* blockStmt) {
 	}
 
 	for (int i = 0; i < blockStmt->stmts->size; i++) {
-		if(!checkStatement(typeChecker, blockStmt->stmts->array[i])) return 0;
+		if(!checkStatement(typeChecker, blockStmt->stmts->array[i])) {
+			freeTable(blockScope);
+			return 0;
+		}
 	}
 
 	freeTable(popItem(typeChecker->typeScopes));
@@ -371,7 +492,7 @@ int checkWhileStmt(TypeChecker* typeChecker, WhileStmt* whileStmt) {
 		fprintf(stderr, "Error: Condition of WhileStatement is not of type boolean\n");
 		return 0;
 	}
-	if(!checkBlockStmt(typeChecker, whileStmt->body)) return 0;
+	if(!checkBlockStmt(typeChecker, whileStmt->body, NULL)) return 0;
 
 	return 1;
 }
@@ -388,16 +509,25 @@ int checkIfStmt(TypeChecker* typeChecker, IfStmt* ifStmt) {
 		return 0;
 	}
 
-	if(!checkBlockStmt(typeChecker, ifStmt->trueBody)) return 0;
+	if(!checkBlockStmt(typeChecker, ifStmt->trueBody, NULL)) return 0;
 
 	if (ifStmt->type == IF_ELSE) {
-		if(!checkBlockStmt(typeChecker, ifStmt->as.ifElse)) return 0;
+		if(!checkBlockStmt(typeChecker, ifStmt->as.ifElse, NULL)) return 0;
 	}
 
 	else if (ifStmt->type == IF_ELSE_IF) {
 		if(!checkIfStmt(typeChecker, ifStmt->as.ifElseIf)) return 0;
 	}
 
+	return 1;
+}
+
+int checkReturnStmt(TypeChecker* typeChecker, ReturnStmt* returnStmt) {
+	if (typeChecker == NULL || returnStmt == NULL) {
+		return 0;
+	}
+
+	if (checkExpression(typeChecker, returnStmt->expression) == -1) return 0;
 	return 1;
 }
 
@@ -434,5 +564,6 @@ HashTable* getVarScope(TypeChecker* typeChecker, char* id) {
 void freeChecker(TypeChecker* typeChecker) {
 	if (typeChecker == NULL) return;
 	freeArray(typeChecker->typeScopes);
+	freeTable(typeChecker->functions);
 	free(typeChecker);
 }

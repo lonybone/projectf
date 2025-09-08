@@ -200,5 +200,7 @@ DynamicArray* parseBuffer(Parser* parser);
 int setParserBuffer(Parser* parser, char* buffer);
 void freeParser(Parser* parser);
 void freeStatement(void* statement);
+void freeFunctionStmt(void* function);
+void freeVariable(void* variable);
 
 #endif

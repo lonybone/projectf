@@ -4,4 +4,4 @@ i32 isSmaller(i32 x, i32 y) {
 	return i
 }
 
-i32 y = isSmaller(x, y)
+y = isSmaller(1, 3)

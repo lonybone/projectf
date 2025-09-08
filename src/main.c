@@ -129,10 +129,7 @@ void printFunctionCall(FunctionCall* function, int indent) {
 	for (int i = 0; i < function->params->size; i++) {
 		printIndent(indent+2);
 		printf("Param %d\n", i);
-		printIndent(indent+3);
-		printf("Id:   %s\n", ((Variable*)(function->params->array[i]))->id);
-		printIndent(indent+3);
-		printf("Type: %d\n", ((Variable*)(function->params->array[i]))->type);
+		printExpression((Expression*)function->params->array[i], indent+4);
 	}
 	printIndent(indent+1);
 	printf("Return Type: %d\n", function->returnType);
@@ -319,38 +316,40 @@ int main(int argc, char* argv[]) {
 
 	if (ast == NULL) {
 		fprintf(stderr, "Parsing failed\n");
-		freeParser(parser);
 		free(buffer);
+		freeParser(parser);
 		return 1;
 	}
 	
 	printf("Parsing Success!\n");
 
-	/*
 	TypeChecker* typeChecker = initializeChecker(ast);
 
 	if (typeChecker == NULL) {
-		freeChecker(typeChecker);
-		freeParser(parser);
 		free(buffer);
+		freeParser(parser);
+		freeArray(ast);
 		return 1;
 	}
 
 	if(!checkTypes(typeChecker)) {
 		fprintf(stderr, "TypeChecking failed\n");
-		freeChecker(typeChecker);
-		freeParser(parser);
 		free(buffer);
+		freeParser(parser);
+		freeArray(ast);
+		freeChecker(typeChecker);
 		return 1;
 	}
 
 	printf("TypeChecking Success!\n");
 
+	/*
 	Codegen* codegen = initializeCodegen(ast);
 
 	if (codegen == NULL) {
 		freeChecker(typeChecker);
 		freeParser(parser);
+		freeArray(ast);
 		free(buffer);
 		return 1;
 	}
@@ -360,6 +359,7 @@ int main(int argc, char* argv[]) {
 		freeChecker(typeChecker);
 		freeParser(parser);
 		freeCodegen(codegen);
+		freeArray(ast);
 		free(buffer);
 		return 1;
 	}
@@ -374,8 +374,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	freeParser(parser);
-	//freeChecker(typeChecker);
-	//freeCodegen(codegen);
 	freeArray(ast);
+	freeChecker(typeChecker);
+	//freeCodegen(codegen);
 	free(buffer);
 }

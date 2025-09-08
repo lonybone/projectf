@@ -107,7 +107,9 @@ void freeArray(DynamicArray* dynamicArray) {
 		return;
 	}
 	for (int i = 0; i < dynamicArray->size; i++) {
-		dynamicArray->freeFunc(dynamicArray->array[i]);
+		if (dynamicArray->freeFunc) {
+			dynamicArray->freeFunc(dynamicArray->array[i]);
+		}
 	}
 	free(dynamicArray->array);
 	free(dynamicArray);
@@ -206,7 +208,9 @@ int updateKeyPair(HashTable *table, char *key, void* value) {
 	Bucket* current = table->array[hashedKey];
 	while (current != NULL) {
 		if (strcmp(current->id, key) == 0) {
-			table->freeFunc(current->value);
+			if (table->freeFunc) {
+				table->freeFunc(current->value);
+			}
 			current->value = value;
 			return 1;
 		}
@@ -236,7 +240,9 @@ void removeKey(HashTable *table, char *key) {
 			}
 
 			free(current->id);
-			table->freeFunc(current->value);
+			if (table->freeFunc) {
+				table->freeFunc(current->value);
+			}
 			free(current);
 			return;
 		}
@@ -258,7 +264,9 @@ void freeTable(void *table) {
 
 		while (current != NULL) {
 			free(current->id);
-			t->freeFunc(current->value);
+			if (t->freeFunc) {
+				t->freeFunc(current->value);
+			}
 
 			previous = current;
 			current = current->next;
@@ -267,5 +275,5 @@ void freeTable(void *table) {
 		}
 	}
 
-	free(table);
+	free(t);
 }

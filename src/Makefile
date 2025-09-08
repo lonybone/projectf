@@ -1,6 +1,7 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -g -MMD -MP
+# Added -fsanitize=address to enable the AddressSanitizer for memory error detection
+CFLAGS = -Wall -g -MMD -MP -fsanitize=address
 
 # Project name
 TARGET = pf
@@ -25,6 +26,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Linking rule: depends on object files
+# The sanitizer flag is also needed at link time.
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
 
