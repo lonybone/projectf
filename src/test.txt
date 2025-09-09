@@ -1,7 +1,7 @@
+b = false
 
 i32 isSmaller(i32 x, i32 y) {
-	i = x + 2
-	return i
+	i = x + y
+	a = !(i < x)
+	return i - y
 }
-
-y = isSmaller(1, 3)

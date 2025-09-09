@@ -10,6 +10,7 @@ struct Codegen {
 	int maxSize;
 	char* buffer;
 	int stackOffset;
+	DynamicArray* labelCounters;
 	DynamicArray* scopes;
 	DynamicArray* ast;
 };

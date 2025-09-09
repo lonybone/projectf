@@ -352,9 +352,9 @@ Statement* parseStatement(Parser* parser) {
 			}
 			memcpy(nextToken, peekToken(parser->lexer), sizeof(Token));
 
-			advanceToken(parser->lexer);
-
 			if (nextToken->type == LPAREN) {
+				advanceToken(parser->lexer);
+
 				statement->type = FUNCTION_STMT;
 				statement->as.function = parseFunctionStmt(parser, typeToken, idToken);
 
@@ -367,6 +367,8 @@ Statement* parseStatement(Parser* parser) {
 			}
 
 			else if (nextToken->type == ASSIGN) {
+				advanceToken(parser->lexer);
+
 				statement->type = EXPRESSION_STMT;
 
 				statement->as.expression = calloc(1, sizeof(Expression));
@@ -417,12 +419,28 @@ Statement* parseStatement(Parser* parser) {
 
 			}
 
+			// annotated declaration without assignment
 			else {
-				fprintf(stderr, "Error: Unexpected Token after Annotated Declaration\n");
-				free(idToken);
-				free(typeToken);
-				free(nextToken);
-				goto error;
+				statement->type = EXPRESSION_STMT;
+
+				statement->as.expression = calloc(1, sizeof(Expression));
+
+				if (statement->as.expression == NULL) {
+					return NULL;
+				}
+
+				statement->as.expression->type = VARIABLE_EXPR;
+				Variable* variable = parseVariable(idToken);
+
+				if (variable == NULL) {
+					free(idToken);
+					free(typeToken);
+					free(nextToken);
+					goto error;
+				}
+
+				statement->as.expression->as.variable = variable;
+				variable->type = getTypeFromToken(typeToken);
 			}
 
 			free(idToken);

@@ -159,7 +159,8 @@ int checkExpression(TypeChecker* typeChecker, Expression* expression) {
 	ValueType typeResult;
 	switch (expression->type) {
 		case EXPR_WRAPPER_EXPR:
-			typeResult = checkExpression(typeChecker, expression->as.expWrap);
+			if (!checkExpression(typeChecker, expression->as.expWrap)) return 0;
+			typeResult = expression->as.expWrap->valueType;
 			break;
 		case FUNCTIONCALL_EXPR:
 			typeResult = checkFunctionCall(typeChecker, expression->as.functionCall);
@@ -213,12 +214,19 @@ ValueType checkFunctionCall(TypeChecker* typeChecker, FunctionCall* function) {
 		}
 
 		Expression* param = (Expression*)function->params->array[i];
-		if (!checkExpression(typeChecker, param)) return -1;
+		if (!checkExpression(typeChecker, param)) {
+			printf("Error: In Argument %d of Function Call \"%s\": Failed to check Types for Argument\n", i, function->id);
+			return -1;
+		}
 		ValueType paramType = param->valueType;
 		if (paramType == -1) return -1;
 
 		ValueType shouldParamType = ((Variable*)functionStmt->params->array[i])->type;
 		if (paramType != shouldParamType) {
+			if (paramType == UNKNOWN) {
+				printf("Error: In Argument %d of Function Call \"%s\": Tried to Access Uninitialized Variable \"%s\"\n", i, function->id, param->as.variable->id);
+				return -1;
+			}
 			fprintf(stderr, "Error: Argument %d of Function Call \"%s\" has type %d but should have type %d\n", i, function->id, paramType, shouldParamType);
 			return -1;
 		}
@@ -251,7 +259,7 @@ ValueType checkAssignment(TypeChecker* typeChecker, Assignment* assignment) {
 		// variable needs to be checked
 		else {
 			if (variable->type != expressionType) {
-				fprintf(stderr, "Error: Variable %s was annotated type %d but got assigned type %d\n", variable->id, variable->type, expressionType);
+				fprintf(stderr, "Error: Variable %s was annotated Type %d but got assigned Type %d\n", variable->id, variable->type, expressionType);
 				return -1;
 			}
 		}
@@ -366,8 +374,11 @@ ValueType checkVariable(TypeChecker* typeChecker, Variable* variable) {
 	}
 
 	ValueType type = getVarTypeFromScopes(typeChecker, variable->id);
+	// is not in scope
 	if (type == -1) {
+		// has annotated type
 		if (variable->type != UNKNOWN) {
+
 			HashTable* currentScope = (HashTable*)peekArray(typeChecker->typeScopes);
 
 			int* varType = malloc(sizeof(int));
@@ -376,7 +387,7 @@ ValueType checkVariable(TypeChecker* typeChecker, Variable* variable) {
 			if(!insertKeyPair(currentScope, variable->id, varType)) return -1;
 			return *varType;
 		}
-		fprintf(stderr, "Error: Tried to Access Uninitialized Variable %s\n", variable->id);
+		fprintf(stderr, "Error: Tried to Access Uninitialized Variable \"%s\"\n", variable->id);
 		return -1;
 	}
 	variable->type = type;
@@ -403,7 +414,7 @@ int checkFunctionStmt(TypeChecker* typeChecker, FunctionStmt* function) {
 	}
 
 	if (containsKey(typeChecker->functions, function->id)) {
-		fprintf(stderr, "Error: Already Declared Function is Declared again\n");
+		fprintf(stderr, "Error: Already Declared Function with id \"%s\" is Declared again\n", function->id);
 		return 0;
 	}
 
@@ -434,6 +445,11 @@ int checkFunctionStmt(TypeChecker* typeChecker, FunctionStmt* function) {
 		return 0;
 	}
 
+	if (function->blockStmt->stmts->size < 1) {
+		fprintf(stderr, "Error: In Function %s: Function is missing Return Statement\n", function->id);
+		return 0;
+	}
+
 	Statement* lastStatement = ((Statement*)(function->blockStmt->stmts->array[function->blockStmt->stmts->size-1]));
 
 	if (lastStatement == NULL || lastStatement->type != RETURN_STMT) {
@@ -442,7 +458,7 @@ int checkFunctionStmt(TypeChecker* typeChecker, FunctionStmt* function) {
 	}
 
 	if (lastStatement->as.returnStmt->expression->valueType != function->returnType) {
-		fprintf(stderr, "Error: In Function %s: Returned Value in %s does not match its Return Type\n", function->id, function->id);
+		fprintf(stderr, "Error: In Function %s: Returned Value in %s with type %d does not match its Return Type %d\n", function->id, function->id, lastStatement->as.returnStmt->expression->valueType, function->returnType);
 		return 0;
 	}
 

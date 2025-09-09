@@ -178,7 +178,6 @@ struct Declaration {
 struct Variable {
 	ValueType type;
 	char* id;
-	int offset;
 };
 
 struct Value {

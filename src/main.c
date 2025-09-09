@@ -343,7 +343,6 @@ int main(int argc, char* argv[]) {
 
 	printf("TypeChecking Success!\n");
 
-	/*
 	Codegen* codegen = initializeCodegen(ast);
 
 	if (codegen == NULL) {
@@ -366,7 +365,6 @@ int main(int argc, char* argv[]) {
 
 	printf("Generation Success!\n\n");
 	writeToFile(codegen, "compiled_test.txt");
-	*/
 
 	for (int i = 0; i < ast->size; i++) {
 		printStatement(ast->array[i], 0);
@@ -376,6 +374,6 @@ int main(int argc, char* argv[]) {
 	freeParser(parser);
 	freeArray(ast);
 	freeChecker(typeChecker);
-	//freeCodegen(codegen);
+	freeCodegen(codegen);
 	free(buffer);
 }
