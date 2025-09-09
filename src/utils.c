@@ -74,9 +74,6 @@ int pushItem(DynamicArray *dynamicArray, void *item) {
 }
 
 void* popItem(DynamicArray* dynamicArray) {
-	if (dynamicArray == NULL) {
-		return NULL;
-	}
 	
 	if (dynamicArray == NULL || dynamicArray->size == 0) {
 		return NULL;

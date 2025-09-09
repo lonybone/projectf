@@ -7,23 +7,22 @@
 #include <stdbool.h>
 
 int generate(Codegen* codegen);
-int generateStackFrame(Codegen* codegen, FunctionStmt* function);
 int generateGlobalStatement(Codegen* codegen, Statement* statement);
 int generateGlobalAssignment(Codegen* codegen, Assignment* assignment);
 Value* calculateGlobalExpression(Expression* expression);
 Value* addValues(BinOperationType binOpType, Value* left, Value* right);
-int generateStatement(Codegen* codegen, Statement* statement);
+int generateStatement(Codegen* codegen, Statement* statement, DynamicArray* toEmit);
 int generateFunctionStatement(Codegen* codegen, FunctionStmt* function);
-int generateExpression(Codegen* codegen, Expression* expression);
-int generateBinOperation(Codegen* codegen, BinOperation* binOperation);
-int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation);
-int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt, HashTable* scope);
-int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt);
-int generateIfStmt(Codegen* codegen, IfStmt* ifStmt);
-int generateReturnStmt(Codegen* codegen, ReturnStmt* returnStmt);
-int generateAssignment(Codegen* codegen, Assignment* assignment);
-int generateValue(Codegen* codegen, Value* value);
-int generateVariable(Codegen* codegen, Variable* variable);
+int generateExpression(Codegen* codegen, Expression* expression, DynamicArray* toEmit);
+int generateBinOperation(Codegen* codegen, BinOperation* binOperation, DynamicArray* toEmit);
+int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation, DynamicArray* toEmit);
+int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt, HashTable* scope, DynamicArray* params, int paramC, int prevStackSize, DynamicArray* toEmit);
+int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt, int prevStackSize, DynamicArray* toEmit);
+int generateIfStmt(Codegen* codegen, IfStmt* ifStmt, int prevStackSize, DynamicArray* toEmit);
+int generateReturnStmt(Codegen* codegen, ReturnStmt* returnStmt, DynamicArray* toEmit);
+int generateAssignment(Codegen* codegen, Assignment* assignment, DynamicArray* toEmit);
+int generateValue(Codegen* codegen, Value* value, DynamicArray* toEmit);
+int generateVariable(Codegen* codegen, Variable* variable, DynamicArray* toEmit);
 int getVariableOffset(Codegen* codegen, char* id);
 HashTable* getScopeForVar(Codegen* codegen, char* id);
 int getTypeSize(ValueType type);
@@ -82,6 +81,8 @@ Codegen* initializeCodegen(DynamicArray* ast) {
 		freeCodegen(codegen);
 		return NULL;
 	}
+
+	*globalCounter = 0;
 
 	if (!pushItem(codegen->labelCounters, globalCounter)) {
 		freeCodegen(codegen);
@@ -150,7 +151,7 @@ int generate(Codegen* codegen) {
 
 	for (int i = 0; i < codegen->ast->size; i++) {
 
-		if (!generateStatement(codegen, (Statement*)codegen->ast->array[i])) {
+		if (!generateStatement(codegen, (Statement*)codegen->ast->array[i], NULL)) {
 
 			freeArray(codegen->scopes);
 			free(codegen->buffer);
@@ -203,102 +204,6 @@ void insertionSort(DynamicArray* arr) {
     }
 }
 
-int seekBlock(Codegen* codegen, Statement* statement, DynamicArray* vars, HashTable* functionScope) {
-	if (codegen == NULL || statement == NULL || vars == NULL || functionScope == NULL) {
-		return 0;
-	}
-
-	switch (statement->type) {
-		case BLOCK_STMT:
-			return 1;
-		case IF_STMT:
-			return 1;
-		case WHILE_STMT:
-			return 1;
-		default:
-			return 0;
-	}
-}
-
-int generateStackFrame(Codegen* codegen, FunctionStmt* function) {
-	if (codegen == NULL || function == NULL) {
-		return -1;
-	}
-
-	DynamicArray* vars = dynamicArray(2, NULL);
-	if (vars == NULL) return -1;
-
-	HashTable* functionScope = hashTable(256, free);
-	if (functionScope == NULL) {
-		freeArray(vars);
-		return -1;
-	}
-	// add Params
-	for (int i = 0; i < function->params->size; i++) {
-		Variable* param = (Variable*)function->params->array[i];
-		if (!insertKeyPair(functionScope, param->id, NULL)) {
-			freeArray(vars);
-			freeTable(functionScope);
-			return -1;
-		}
-
-		if (!pushItem(vars, param)) {
-			freeArray(vars);
-			freeTable(functionScope);
-			return -1;
-		}
-
-	}
-
-	// add all variables in function body
-	for (int i = 0; i < function->blockStmt->stmts->size; i++) {
-		Statement* statement = ((Statement*)function->blockStmt->stmts->array[i]);
-
-		if (statement->type == EXPRESSION_STMT && statement->as.expression->type == ASSIGN_EXPR) {
-			Variable* variable = ((Variable*)(statement->as.expression->as.assignment->variable));
-			if (containsKey(functionScope, variable->id)) {
-				continue;
-			}
-			if (!insertKeyPair(functionScope, variable->id, NULL)) {
-				freeArray(vars);
-				freeTable(functionScope);
-				return -1;
-			}
-			if (!pushItem(vars, variable)) {
-				freeArray(vars);
-				freeTable(functionScope);
-				return -1;
-			}
-		}
-	}
-
-	insertionSort(vars);
-	int totalSize = 0;
-
-	for (int i = 0; i < vars->size; i++) {
-		Variable* variable = ((Variable*)(vars->array[i]));
-
-		totalSize += getTypeSize(variable->type);
-		int* varOffset = malloc(sizeof(int));
-		if (varOffset == NULL) {
-			freeArray(vars);
-			freeTable(functionScope);
-			return -1;
-		}
-		*varOffset = -(int)totalSize;
-		if (!updateKeyPair(functionScope, variable->id, varOffset)) {
-			free(varOffset);
-			freeArray(vars);
-			freeTable(functionScope);
-			return -1;
-		}
-	}
-
-	freeArray(vars);
-	function->scope = functionScope;
-	return totalSize + (16 - (totalSize % 16));
-}
-
 int generateGlobalStatement(Codegen* codegen, Statement* statement) {
 	if (codegen == NULL || statement == NULL) {
 		return 0;
@@ -346,6 +251,10 @@ int generateGlobalAssignment(Codegen* codegen, Assignment* assignment) {
 	}
 
 	char* variableId = assignment->variable->id;
+	if (!insertKeyPair((HashTable*)codegen->scopes->array[0], variableId, NULL)) {
+		fprintf(stderr, "Error: Tried to redifine global variable \"%s\"", variableId);
+		return 0;
+	}
 
 	switch (type) {
 		char instr[256];
@@ -621,8 +530,7 @@ Value* addValues(BinOperationType binOpType, Value* left, Value* right) {
 	return res;
 }
 
-int generateStatement(Codegen* codegen, Statement* statement) {
-
+int generateStatement(Codegen* codegen, Statement* statement, DynamicArray* toEmit) {
 	if (codegen == NULL || statement == NULL) {
 		return 0;
 	}
@@ -630,20 +538,20 @@ int generateStatement(Codegen* codegen, Statement* statement) {
 	if (codegen->scopes->size == 1) {
 		return generateGlobalStatement(codegen, statement);
 	}
-	
+
 	switch (statement->type) {
 		case EXPRESSION_STMT:
-			return generateExpression(codegen, statement->as.expression);
+			return generateExpression(codegen, statement->as.expression, toEmit);
 		case FUNCTION_STMT:
 			return generateFunctionStatement(codegen, statement->as.function);
 		case BLOCK_STMT:
-			return generateBlockStmt(codegen, statement->as.blockStmt, NULL);
+			return generateBlockStmt(codegen, statement->as.blockStmt, NULL, NULL, 0, 0, toEmit);
 		case WHILE_STMT:
-			return generateWhileStmt(codegen, statement->as.whileStmt);
+			return generateWhileStmt(codegen, statement->as.whileStmt, 0, toEmit);
 		case IF_STMT:
-			return generateIfStmt(codegen, statement->as.ifStmt);
+			return generateIfStmt(codegen, statement->as.ifStmt, 0, toEmit);
 		case RETURN_STMT:
-			return generateReturnStmt(codegen, statement->as.returnStmt);
+			return generateReturnStmt(codegen, statement->as.returnStmt, toEmit);
 		case DECLARATION_STMT:
 		default:
 			fprintf(stderr, "Error: Unexpected Statement type %d in generateStatement\n", statement->type);
@@ -656,43 +564,99 @@ int generateFunctionStatement(Codegen* codegen, FunctionStmt* function) {
 		return 0;
 	}
 
-	int stackFrameSize = generateStackFrame(codegen, function);
-	if (stackFrameSize == -1) {
-		function->scope = NULL;
+	HashTable* functionScope = hashTable(256, free);
+	if (functionScope == NULL) {
 		return 0;
+	}
+
+	DynamicArray* params = dynamicArray(2, NULL);
+	if (params == NULL) {
+		freeTable(functionScope);
+		return 0;
+	}
+
+	int* labelCounter = malloc(sizeof(int));
+	if (labelCounter == NULL) {
+		freeTable(functionScope);
+		freeArray(params);
+		return 0;
+	}
+	*labelCounter = 0;
+
+	if (!pushItem(codegen->labelCounters, labelCounter)) {
+		free(labelCounter);
+		freeTable(functionScope);
+		freeArray(params);
+		return 0;
+	}
+
+	// for now only i32s and 6 params allowed
+	if (function->params->size > 6) {
+		free(popItem(codegen->labelCounters));
+		freeTable(functionScope);
+		freeArray(params);
+		fprintf(stderr, "Error: Only 6 Function Prameters allowed for now\n");
+		return 0;
+	}
+
+	// add Params
+	for (int i = 0; i < function->params->size; i++) {
+		Variable* param = (Variable*)function->params->array[i];
+		if (!insertKeyPair(functionScope, param->id, NULL)) {
+			free(popItem(codegen->labelCounters));
+			freeTable(functionScope);
+			freeArray(params);
+			return -1;
+		}
+
+		if (!pushItem(params, param)) {
+			free(popItem(codegen->labelCounters));
+			freeTable(functionScope);
+			freeArray(params);
+			return -1;
+		}
+	}
+
+	DynamicArray* toEmit = dynamicArray(16, free);
+	if (toEmit == NULL) {
+		free(popItem(codegen->labelCounters));
+		freeTable(functionScope);
+		freeArray(params);
+		return 0;
+	}
+
+	int rawStackFrameSize = generateBlockStmt(codegen, function->blockStmt, functionScope, params, function->params->size, 0, toEmit);
+	if (rawStackFrameSize == -1) {
+		free(popItem(codegen->labelCounters));
+		freeArray(toEmit);
+		return 0;
+	}
+
+	int stackFrameSize = (rawStackFrameSize + 15) & ~15;
+	if (stackFrameSize == 0) {
+		stackFrameSize = 16;
 	}
 
 	// function prologue
 	char prologue[256];
 	snprintf(prologue, sizeof(prologue), "%s:\n\tpush ebp\n\tmov ebp, esp\n\tsub esp, %d\n", function->id, stackFrameSize);
 	if (!addToBuffer(codegen, prologue)) {
-		function->scope = NULL;
+		free(popItem(codegen->labelCounters));
+		freeArray(toEmit);
 		return 0;
 	}
 
-	// for now only ints and 6 params allowed
-	if (function->params->size > 6) {
-		function->scope = NULL;
-		fprintf(stderr, "Error: Only 6 Function Prameters allowed for now\n");
-		return 0;
-	}
-	
-	// push params on the stack
-	for (int i = 0; i < function->params->size; i++) {
-		Variable* param = ((Variable*)function->params->array[i]);
-		const char* reg = getRegister(i+1, getTypeSize(param->type));
-		int paramOffset = *(int*)getValue(function->scope, param->id);
-		char instr[64];
-		snprintf(instr, sizeof(instr), "mov [rbp%d] %s\n", paramOffset, reg);
-		addToBuffer(codegen, instr);
-
+	// emitting the whole block
+	for (int i = 0; i < toEmit->size; i++) {
+		if (!addToBuffer(codegen, (char*)toEmit->array[i])) {
+			free(popItem(codegen->labelCounters));
+			freeArray(toEmit);
+			return 0;
+		}
 	}
 
-	if (!generateBlockStmt(codegen, function->blockStmt, function->scope)) {
-		function->scope = NULL;
-		return 0;
-	}
-	function->scope = NULL;
+	freeArray(toEmit);
+	free(popItem(codegen->labelCounters));
 
 	// function epilogue
 	char epilogue[256];
@@ -703,9 +667,9 @@ int generateFunctionStatement(Codegen* codegen, FunctionStmt* function) {
 
 // needs to create a new scope at start and remove it at the end
 // needs to handle correct increment/decrement of the global stack offset variable by e.g. remembering offset at start and resetting it at the end
-int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt, HashTable* scope) {
+int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt, HashTable* scope, DynamicArray* params, int paramC, int prevStackSize, DynamicArray* toEmit) {
 	if (codegen == NULL || blockStmt == NULL) {
-		return 0;
+		return -1;
 	}
 
 	HashTable* blockScope;
@@ -716,134 +680,242 @@ int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt, HashTable* scope) 
 		blockScope = hashTable(256, free);
 	}
 
-	int* labelCounter = malloc(sizeof(int));
-	*labelCounter = 0;
-
-	if (labelCounter == NULL) {
-		freeTable(blockScope);
-		return 0;
-	}
-
-	if (!pushItem(codegen->labelCounters, labelCounter)) {
-		free(labelCounter);
-		freeTable(blockScope);
-		return 0;
+	if (blockScope == NULL) {
+		return -1;
 	}
 
 	if (!pushItem(codegen->scopes, blockScope)) {
 		freeTable(blockScope);
-		return 0;
+		return -1;
+	}
+
+	DynamicArray* vars;
+	if (params) {
+		vars = params;
+	}
+	else {
+		vars = dynamicArray(2, NULL);
+	}
+
+	if (vars == NULL) {
+		freeTable(blockScope);
+		return -1;
 	}
 
 	for (int i = 0; i < blockStmt->stmts->size; i++) {
-		if (!generateStatement(codegen, (Statement*)blockStmt->stmts->array[i])) {
-			return 0;
+		Statement* statement = ((Statement*)blockStmt->stmts->array[i]);
+
+		if (statement->type == EXPRESSION_STMT && statement->as.expression->type == ASSIGN_EXPR) {
+			Variable* variable = ((Variable*)(statement->as.expression->as.assignment->variable));
+			if (containsKey(blockScope, variable->id) || getVariableOffset(codegen, variable->id) != 0) {
+				continue;
+			}
+			if (!insertKeyPair(blockScope, variable->id, NULL)) {
+				freeArray(vars);
+				freeTable(blockScope);
+				return -1;
+			}
+			if (!pushItem(vars, variable)) {
+				freeArray(vars);
+				freeTable(blockScope);
+				return -1;
+			}
 		}
 	}
 
-	free((int*)popItem(codegen->labelCounters));
-	freeTable((HashTable*)popItem(codegen->scopes));
-	return 1;
-}
+	insertionSort(vars);
+	int currentMaxStackSize = prevStackSize;
 
-int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt) { return 0; }
-int generateIfStmt(Codegen* codegen, IfStmt* ifStmt) {
-	if (codegen == NULL || ifStmt == NULL) {
-		return 0;
+	for (int i = 0; i < vars->size; i++) {
+		Variable* variable = ((Variable*)(vars->array[i]));
+
+		currentMaxStackSize += getTypeSize(variable->type);
+		int* varOffset = malloc(sizeof(int));
+		if (varOffset == NULL) {
+			freeArray(vars);
+			freeTable(blockScope);
+			return -1;
+		}
+		*varOffset = -(int)currentMaxStackSize;
+		if (!updateKeyPair(blockScope, variable->id, varOffset)) {
+			free(varOffset);
+			freeArray(vars);
+			freeTable(blockScope);
+			return -1;
+		}
 	}
 
-	int labelCounter = *(int*)peekArray(codegen->labelCounters++);
+	// push params on the stack
+	if (params != NULL) {
+		for (int i = 0; i < paramC; i++) {
+			Variable* param = ((Variable*)params->array[i]);
+			const char* reg = getRegister(i+1, getTypeSize(param->type));
+			int paramOffset = *(int*)getValue(blockScope, param->id);
+			char instr[64];
+			snprintf(instr, sizeof(instr), "mov [rbp%+d], %s\n", paramOffset, reg);
+			if (!pushItem(toEmit, strdup(instr))) {
+				freeArray(vars);
+				freeTable((HashTable*)popItem(codegen->scopes));
+				return -1;
+			}
+		}
+	}
+
+	freeArray(vars);
+
+	for (int i = 0; i < blockStmt->stmts->size; i++) {
+		Statement* statement = (Statement*)blockStmt->stmts->array[i];
+
+		int nesttingStackSize = currentMaxStackSize;
+		switch (statement->type) {
+			case BLOCK_STMT: {
+				int tmp = generateBlockStmt(codegen, statement->as.blockStmt, NULL, NULL, 0, nesttingStackSize, toEmit);
+				if (tmp == -1) {
+					freeTable((HashTable*)popItem(codegen->scopes));
+					return -1;
+				}
+				if (tmp > currentMaxStackSize) {
+					currentMaxStackSize = tmp;
+				}
+				break;
+			}
+			case IF_STMT: {
+				int tmp = generateIfStmt(codegen, statement->as.ifStmt, nesttingStackSize, toEmit);
+				if (tmp == -1) {
+					freeTable((HashTable*)popItem(codegen->scopes));
+					return -1;
+				}
+				if (tmp > currentMaxStackSize) {
+					currentMaxStackSize = tmp;
+				}
+				break;
+			}
+			case WHILE_STMT: {
+				int tmp = generateWhileStmt(codegen, statement->as.whileStmt, nesttingStackSize, toEmit);
+				if (tmp == -1) {
+					freeTable((HashTable*)popItem(codegen->scopes));
+					return -1;
+				}
+				if (tmp > currentMaxStackSize) {
+					currentMaxStackSize = tmp;
+				}
+				break;
+			}
+			default:
+				if (!generateStatement(codegen, statement, toEmit)) {
+					freeTable((HashTable*)popItem(codegen->scopes));
+					return -1;
+				}
+				break;
+		}
+	}
+
+	freeTable((HashTable*)popItem(codegen->scopes));
+	return currentMaxStackSize;
+}
+
+int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt, int prevStackSize, DynamicArray* toEmit) { return 0; }
+int generateIfStmt(Codegen* codegen, IfStmt* ifStmt, int prevStackSize, DynamicArray* toEmit) {
+	if (codegen == NULL || ifStmt == NULL) {
+		return -1;
+	}
+
+	int* counterPtr = (int*)peekArray(codegen->labelCounters);
+	int labelCounter = *counterPtr;
+	(*counterPtr)++;
 	char instr[64];
+	prevStackSize = (prevStackSize + 15) & ~15;
+
+	if (!generateExpression(codegen, ifStmt->condition, toEmit)) return -1;
 
 	if (ifStmt->type == ONLYIF) {
-		if (!generateExpression(codegen, ifStmt->condition)) return 0;
 		snprintf(instr, sizeof(instr), "\tjz .end_if_%d\n", labelCounter);
-		addToBuffer(codegen, instr);
+		if (!pushItem(toEmit, strdup(instr))) return -1;
 
-		if (!generateBlockStmt(codegen, ifStmt->trueBody, NULL)) return 0;
-		snprintf(instr, sizeof(instr), "\t.end_if_%d\n", labelCounter);
-		addToBuffer(codegen, instr);
+		int trueBranchSize = generateBlockStmt(codegen, ifStmt->trueBody, NULL, NULL, 0, prevStackSize, toEmit);
+		if (trueBranchSize == -1) return -1;
+		snprintf(instr, sizeof(instr), "\t.end_if_%d:\n", labelCounter);
+		if (!pushItem(toEmit, strdup(instr))) return -1;
+
+		return trueBranchSize;
 	}
 	else {
-		if (!generateExpression(codegen, ifStmt->condition)) return 0;
 		snprintf(instr, sizeof(instr), "\tjz .else_%d\n", labelCounter);
-		addToBuffer(codegen, instr);
+		if (!pushItem(toEmit, strdup(instr))) return -1;
 
-		if (!generateBlockStmt(codegen, ifStmt->trueBody, NULL)) return 0;
+		int trueBranchSize = generateBlockStmt(codegen, ifStmt->trueBody, NULL, NULL, 0, prevStackSize, toEmit);
+		if (trueBranchSize == -1) return -1;
+
 		snprintf(instr, sizeof(instr), "\tjmp .end_if_%d\n", labelCounter);
-		addToBuffer(codegen, instr);
+		if (!pushItem(toEmit, strdup(instr))) return -1;
+		snprintf(instr, sizeof(instr), "\t.else_%d:\n", labelCounter);
+		if (!pushItem(toEmit, strdup(instr))) return -1;
 
-		snprintf(instr, sizeof(instr), "\t.else_%d\n", labelCounter);
-		addToBuffer(codegen, instr);
-
+		int falseBranchSize = 0;
 		if (ifStmt->type == IF_ELSE) {
-			if (!generateBlockStmt(codegen, ifStmt->as.ifElse, NULL)) return 0;
-			snprintf(instr, sizeof(instr), "\t.end_if_%d\n", labelCounter);
-			addToBuffer(codegen, instr);
+			falseBranchSize = generateBlockStmt(codegen, ifStmt->as.ifElse, NULL, NULL, 0, prevStackSize, toEmit);
+		} else {
+			falseBranchSize = generateIfStmt(codegen, ifStmt->as.ifElseIf, prevStackSize, toEmit);
 		}
-		else {
-			if (!generateIfStmt(codegen, ifStmt->as.ifElseIf)) return 0;
-			snprintf(instr, sizeof(instr), "\t.end_if_%d\n", labelCounter);
-			addToBuffer(codegen, instr);
-		}
-	}
+		if (falseBranchSize == -1) return -1;
+		snprintf(instr, sizeof(instr), "\t.end_if_%d:\n", labelCounter);
+		if (!pushItem(toEmit, strdup(instr))) return -1;
 
-	return 1;
+		return (trueBranchSize > falseBranchSize) ? trueBranchSize : falseBranchSize;
+	}
 }
 
-int generateReturnStmt(Codegen* codegen, ReturnStmt* returnStmt) {
+int generateReturnStmt(Codegen* codegen, ReturnStmt* returnStmt, DynamicArray* toEmit) {
 	if (codegen == NULL || returnStmt == NULL) {
 		return 0;
 	}
 
-	return generateExpression(codegen, returnStmt->expression);
+	return generateExpression(codegen, returnStmt->expression, toEmit);
 }
 
-int generateExpression(Codegen* codegen, Expression* expression) {
-
+int generateExpression(Codegen* codegen, Expression* expression, DynamicArray* toEmit) {
 	if (codegen == NULL || expression == NULL) {
 		return 0;
 	}
 
 	switch (expression->type) {
 		case EXPR_WRAPPER_EXPR:
-			return generateExpression(codegen, expression->as.expWrap);
+			return generateExpression(codegen, expression->as.expWrap, toEmit);
 		case ASSIGN_EXPR:
-			return generateAssignment(codegen, expression->as.assignment);
+			return generateAssignment(codegen, expression->as.assignment, toEmit);
 		case UNARY_EXPR:
-			return generateUnaryOperation(codegen, expression->as.unop);
+			return generateUnaryOperation(codegen, expression->as.unop, toEmit);
 		case BINOP_EXPR:
-			return generateBinOperation(codegen, expression->as.binop);
+			return generateBinOperation(codegen, expression->as.binop, toEmit);
 		case VARIABLE_EXPR:
-			return generateVariable(codegen, expression->as.variable);
+			return generateVariable(codegen, expression->as.variable, toEmit);
 		case VALUE_EXPR:
-			return generateValue(codegen, expression->as.value);
+			return generateValue(codegen, expression->as.value, toEmit);
 		default:
 			fprintf(stderr, "Error: Unexpected Expression type in generate Expression\n");
 			return 0;
 	}
 }
 
-int generateBinOperation(Codegen* codegen, BinOperation* binOperation) {
-	
+int generateBinOperation(Codegen* codegen, BinOperation* binOperation, DynamicArray* toEmit) {
 	if (codegen == NULL || binOperation == NULL) {
 		return 0;
 	}
 
-	if (!generateExpression(codegen, binOperation->right)) return 0;
-	if (!addToBuffer(codegen, "push rax\n")) return 0;
-	if (!generateExpression(codegen, binOperation->left)) return 0;
-	if (!addToBuffer(codegen, "pop rdx\n")) return 0;
+	if (!generateExpression(codegen, binOperation->right, toEmit)) return 0;
+	if (!pushItem(toEmit, strdup("push rax\n"))) return 0;
+	if (!generateExpression(codegen, binOperation->left, toEmit)) return 0;
+	if (!pushItem(toEmit, strdup("pop rdx\n"))) return 0;
 
 	switch (binOperation->type) {
 		case ADD_OP:
-			return addToBuffer(codegen, "add rax, rdx\n");
+			return pushItem(toEmit, strdup("add rax, rdx\n"));
 		case SUB_OP:
-			return addToBuffer(codegen, "sub rax, rdx\n");
+			return pushItem(toEmit, strdup("sub rax, rdx\n"));
 		case MUL_OP:
-			return addToBuffer(codegen, "mul rdx\n");
+			return pushItem(toEmit, strdup("mul rdx\n"));
 		case DIV_OP:
-			return addToBuffer(codegen, "div rdx\n");
+			return pushItem(toEmit, strdup("div rdx\n"));
 		case MOD_OP:
 			fprintf(stderr, "Error: Operator Modulus not implemented yet\n");
 			return 0;
@@ -853,64 +925,61 @@ int generateBinOperation(Codegen* codegen, BinOperation* binOperation) {
 		case GTE_OP:
 		case EQ_OP:
 		case NEQ_OP:
-			if (!addToBuffer(codegen, "cmp rax, rdx\n")) return 0;
+			if (!pushItem(toEmit, strdup("cmp rax, rdx\n"))) return 0;
 			switch (binOperation->type) {
 				case ST_OP:
-					if(!addToBuffer(codegen, "setl al\n")) return 0;
+					if(!pushItem(toEmit, strdup("setl al\n"))) return 0;
 					break;
 				case STE_OP:
-					if(!addToBuffer(codegen, "setle al\n")) return 0;
+					if(!pushItem(toEmit, strdup("setle al\n"))) return 0;
 					break;
 				case GT_OP:
-					if(!addToBuffer(codegen, "setg al\n")) return 0;
+					if(!pushItem(toEmit, strdup("setg al\n"))) return 0;
 					break;
 				case GTE_OP:
-					if(!addToBuffer(codegen, "setge al\n")) return 0;
+					if(!pushItem(toEmit, strdup("setge al\n"))) return 0;
 					break;
 				case EQ_OP:
-					if(!addToBuffer(codegen, "sete al\n")) return 0;
+					if(!pushItem(toEmit, strdup("sete al\n"))) return 0;
 					break;
 				case NEQ_OP:
-					if(!addToBuffer(codegen, "setne al\n")) return 0;
+					if(!pushItem(toEmit, strdup("setne al\n"))) return 0;
 					break;
 				default:
 					fprintf(stderr, "Error: Encountered illegal Operand in generateBinOperation\n");
 					return 0;
 			}
-			return addToBuffer(codegen, "movzx rax, al\n");
+			return pushItem(toEmit, strdup("movzx rax, al\n"));
 		default:
 			fprintf(stderr, "Error: Encountered illegal Operand generateBinOperation\n");
 			return 0;
 	}
 }
 
-int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation) {
+int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation, DynamicArray* toEmit) {
 	if (codegen == NULL || unaryOperation == NULL) {
 		return 0;
 	}
 
 	if (unaryOperation->type == NOT) {
-		if (!generateExpression(codegen, unaryOperation->right)) return 0;
-		return addToBuffer(codegen, "test rax, rax\nsetz al\nmovzx rax, al\n");
+		if (!generateExpression(codegen, unaryOperation->right, toEmit)) return 0;
+		return pushItem(toEmit, strdup("test rax, rax\nsetz al\nmovzx rax, al\n"));
 	}
 	else if (unaryOperation->type == MINUS) {
-		if (!generateExpression(codegen, unaryOperation->right)) return 0;
-		return addToBuffer(codegen, "neg rax\n");
+		if (!generateExpression(codegen, unaryOperation->right, toEmit)) return 0;
+		return pushItem(toEmit, strdup("neg rax\n"));
 	}
 
 	fprintf(stderr, "Error: Unexpected Unary Operation Operand encountered in generateUnaryOperation: %d\n", unaryOperation->type);
 	return 0;
 }
 
-// if this assignment is a declaration+initialization, then increment some global offset variable by the variables inferred type size in bytes and add it to scopes at highest scope ofc
-// if it is not a declaration then just grab the stack location of that variable from the scopes
-// global stack offset must also be so that it gets decremented so that it matches the types length in byte
-int generateAssignment(Codegen* codegen, Assignment* assignment) {
+int generateAssignment(Codegen* codegen, Assignment* assignment, DynamicArray* toEmit) {
 	if (codegen == NULL || assignment == NULL) {
 		return 0;
 	}
 
-	if (!generateExpression(codegen, assignment->expression)) return 0;
+	if (!generateExpression(codegen, assignment->expression, toEmit)) return 0;
 	int variableOffset = getVariableOffset(codegen, assignment->variable->id);
 
 	ValueType variableType = assignment->variable->type;
@@ -920,10 +989,10 @@ int generateAssignment(Codegen* codegen, Assignment* assignment) {
 	char lastInstruction[64];
 	snprintf(lastInstruction, sizeof(lastInstruction), "mov [rbp%d], %s\n", variableOffset, reg);
 
-	return addToBuffer(codegen, lastInstruction);
+	return pushItem(toEmit, strdup(lastInstruction));
 }
 
-int generateVariable(Codegen* codegen, Variable* variable) {
+int generateVariable(Codegen* codegen, Variable* variable, DynamicArray* toEmit) {
 	if (codegen == NULL || variable == NULL) {
 		return 0;
 	}
@@ -962,11 +1031,10 @@ int generateVariable(Codegen* codegen, Variable* variable) {
 			fprintf(stderr, "Error: Unsupported type size in generateVariable\n");
 			return 0;
 	}
-	
-	return addToBuffer(codegen, instr);
+	return pushItem(toEmit, strdup(instr));
 }
 
-int generateValue(Codegen* codegen, Value* value) {
+int generateValue(Codegen* codegen, Value* value, DynamicArray* toEmit) {
 	if (codegen == NULL || value == NULL) {
 		return 0;
 	}
@@ -974,13 +1042,13 @@ int generateValue(Codegen* codegen, Value* value) {
 	switch (value->type) {
 		case LONG_TYPE:
 			snprintf(instr, sizeof(instr), "mov rax, %lld\n", value->as.i_64);
-			return addToBuffer(codegen, instr);
+			return pushItem(toEmit, strdup(instr));
 		case DOUBLE_TYPE:
 			fprintf(stderr, "Error: Did not implement float Types yet :(\n");
 			return 0;
 		case BOOL_TYPE:
 			snprintf(instr, sizeof(instr), "mov al, %d\n", value->as.b);
-			return addToBuffer(codegen, instr);
+			return pushItem(toEmit, strdup(instr));
 		default:
 			fprintf(stderr, "Error: Unregognized Value Type in generateValue\n");
 			return 0;
@@ -1027,7 +1095,7 @@ int getTypeSize(ValueType type) {
 		case BOOL_TYPE:
 			return 1;
 		default:
-			fprintf(stderr, "Error: Unrecognized Type, cannot get type Offset\n");
+			fprintf(stderr, "Error: Unrecognized Type %d, cannot get type Offset\n", type);
 			return 0;
 			
 	}

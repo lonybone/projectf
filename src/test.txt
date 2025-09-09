@@ -3,5 +3,13 @@ b = false
 i32 isSmaller(i32 x, i32 y) {
 	i = x + y
 	a = !(i < x)
+	if (b) {
+		i32 z = 1
+	}
+	else {
+		i32 z = 3
+		bool t = true
+	}
+
 	return i - y
 }

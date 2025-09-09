@@ -436,6 +436,8 @@ int checkFunctionStmt(TypeChecker* typeChecker, FunctionStmt* function) {
 		if (varType == NULL) return -1;
 		*varType = ((Variable*)(function->params->array[i]))->type;
 		if (!insertKeyPair(newScope, varId, varType)) {
+			fprintf(stderr, "Error: Found duplicate alias \"%s\" in Function for Function Paramter %d in Function \"%s\"\n", varId, i, function->id);
+			free(varType);
 			freeTable(newScope);
 			return 0;
 		}

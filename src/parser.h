@@ -102,7 +102,6 @@ struct Statement {
 
 struct FunctionStmt {
 	char* id;
-	HashTable* scope;
 	DynamicArray* params;
 	BlockStmt* blockStmt;
 	ValueType returnType;

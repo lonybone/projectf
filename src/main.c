@@ -107,6 +107,9 @@ void printValue(Value* val, int indent) {
     if (!val) return;
     printIndent(indent);
     switch (val->type) {
+	case BOOL_TYPE:
+		printf("Value: %d\n", val->as.b);
+		break;
 	case LONG_TYPE:
 		printf("Value: %ld\n", val->as.i_32);
 		break;
