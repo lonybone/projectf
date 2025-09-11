@@ -14,6 +14,7 @@ DynamicArray *dynamicArray(int growthFactor, GenericFreeFunc freeFunc) {
 
 	dynamicArray->growthFactor = growthFactor;
 	dynamicArray->maxSize = INITIAL_CAPACITY; 
+	dynamicArray->minSize = MINUMUM_SIZE;
 	dynamicArray->size = 0;
 	dynamicArray->freeFunc = freeFunc;
 	dynamicArray->array = malloc(INITIAL_CAPACITY * sizeof(void*));
@@ -83,7 +84,7 @@ void* popItem(DynamicArray* dynamicArray) {
 	dynamicArray->array[dynamicArray->size-1] = NULL;
 	dynamicArray->size--;
 
-	if (dynamicArray->size <= dynamicArray->maxSize / dynamicArray->growthFactor) {
+	if (dynamicArray->size <= dynamicArray->maxSize / dynamicArray->growthFactor && dynamicArray->size > MINUMUM_SIZE) {
 
 		dynamicArray->maxSize /= dynamicArray->growthFactor;
 		void** tmp = realloc(dynamicArray->array, dynamicArray->maxSize * sizeof(void*));

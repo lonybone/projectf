@@ -1,15 +1,10 @@
-b = false
 
-i32 isSmaller(i32 x, i32 y) {
-	i = x + y
-	a = !(i < x)
-	if (b) {
-		i32 z = 1
-	}
-	else {
-		i32 z = 3
-		bool t = true
-	}
+i32 testUnderflow() {
+    a = 0
+    return a - 1
+}
 
-	return i - y
+i32 main() {
+    result = testUnderflow()
+    return result
 }

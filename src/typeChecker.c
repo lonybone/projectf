@@ -207,11 +207,12 @@ ValueType checkFunctionCall(TypeChecker* typeChecker, FunctionCall* function) {
 
 	function->returnType = functionStmt->returnType;
 
+	if (function->params->size != functionStmt->params->size) {
+		fprintf(stderr, "Error: Incorrect Amount of Arguments for Function call \"%s\": required: %d, but got %d\n", function->id, functionStmt->params->size, function->params->size);
+		return -1;
+	}
+
 	for (int i = 0; i < function->params->size; i++) {
-		if (i >= functionStmt->params->size) {
-			fprintf(stderr, "Error: Too many Arguments for Function call \"%s\": required: %d, but got %d\n", function->id, functionStmt->params->size, function->params->size);
-			return -1;
-		}
 
 		Expression* param = (Expression*)function->params->array[i];
 		if (!checkExpression(typeChecker, param)) {
@@ -287,6 +288,8 @@ ValueType checkAssignment(TypeChecker* typeChecker, Assignment* assignment) {
 			fprintf(stderr, "Error: Tried to Assign value of type %d to Variable %s of type %d\n", expressionType, variable->id, variableType);
 			return -1;
 		}
+
+		variable->type = expressionType;
 	}
 
 	return expressionType;
@@ -490,7 +493,6 @@ int checkBlockStmt(TypeChecker* typeChecker, BlockStmt* blockStmt, HashTable* sc
 
 	for (int i = 0; i < blockStmt->stmts->size; i++) {
 		if(!checkStatement(typeChecker, blockStmt->stmts->array[i])) {
-			freeTable(blockScope);
 			return 0;
 		}
 	}

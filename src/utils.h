@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 static const int INITIAL_CAPACITY = 16;
+static const int MINUMUM_SIZE = 16;
 
 typedef struct HashTable HashTable;
 typedef struct Bucket Bucket;
@@ -13,6 +14,7 @@ typedef void (*GenericFreeFunc) (void*);
 typedef struct DynamicArray {
 	int growthFactor;
 	int maxSize;
+	int minSize;
 	int size;
 	void** array;
 	GenericFreeFunc freeFunc;

@@ -366,13 +366,52 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	printf("Generation Success!\n\n");
-	writeToFile(codegen, "compiled_test.txt");
+	printf("Generation Success!\n");
+	writeToFile(codegen, "compiled.asm");
 
+	/*
 	for (int i = 0; i < ast->size; i++) {
 		printStatement(ast->array[i], 0);
 		printf("\n");
 	}
+	*/
+
+	int status = system("nasm -f elf64 -g -F dwarf -o compiled.o compiled.asm");
+	if (status != 0) {
+		fprintf(stderr, "Error: Failed assembling file\n");
+		freeParser(parser);
+		freeArray(ast);
+		freeChecker(typeChecker);
+		freeCodegen(codegen);
+		free(buffer);
+		return 0;
+	}
+
+	status = system("gcc -g -no-pie -o compiled compiled.o");
+	if (status != 0) {
+		fprintf(stderr, "Error: Failed linking file\n");
+		freeParser(parser);
+		freeArray(ast);
+		freeChecker(typeChecker);
+		freeCodegen(codegen);
+		free(buffer);
+		return 0;
+	}
+
+	printf("Assembling Success!\n");
+
+	//status = system("rm compiled.o compiled.asm");
+	if (status != 0) {
+		fprintf(stderr, "Error: Failed removing object file\n");
+		freeParser(parser);
+		freeArray(ast);
+		freeChecker(typeChecker);
+		freeCodegen(codegen);
+		free(buffer);
+		return 0;
+	}
+
+	printf("Linking Success!\n");
 
 	freeParser(parser);
 	freeArray(ast);
