@@ -660,7 +660,7 @@ int generateFunctionStatement(Codegen* codegen, FunctionStmt* function) {
 
 	// function epilogue
 	char epilogue[256];
-	const char* printEpilogue = "mov rdi, message\nmov esi, eax\nmov rax, 0\ncall printf\nmov rax, 0\n";
+	const char* printEpilogue = (strcmp(function->id, "main") == 0) ? "mov rdi, message\nmov esi, eax\nmov rax, 0\ncall printf\nmov rax, 0\n" : "";
 
 	snprintf(epilogue, sizeof(epilogue), "%s%s_return:\n\tleave\n\tret\n; End of Function \"%s\"\n\n", printEpilogue, function->id, function->id);
 	if (!addToBuffer(codegen, epilogue)) return 0;
@@ -986,21 +986,20 @@ int generateBinOperation(Codegen* codegen, BinOperation* binOperation, DynamicAr
 		return 0;
 	}
 
-
 	if (!generateExpression(codegen, binOperation->left, toEmit)) return 0;
 	if (!pushItem(toEmit, strdup("push rax\nsub rsp, 8\n"))) return 0;
 	if (!generateExpression(codegen, binOperation->right, toEmit)) return 0;
-	if (!pushItem(toEmit, strdup("mov r10, rax\nadd rsp, 8\npop rax\n"))) return 0;
+	if (!pushItem(toEmit, strdup("mov r10d, eax\nadd rsp, 8\npop rax\n"))) return 0;
 
 	switch (binOperation->type) {
 		case ADD_OP:
-			return pushItem(toEmit, strdup("add rax, r10\n"));
+			return pushItem(toEmit, strdup("add eax, r10d\n"));
 		case SUB_OP:
-			return pushItem(toEmit, strdup("sub rax, r10\n"));
+			return pushItem(toEmit, strdup("sub eax, r10d\n"));
 		case MUL_OP:
-			return pushItem(toEmit, strdup("mul r10\n"));
+			return pushItem(toEmit, strdup("imul r10d\n"));
 		case DIV_OP:
-			return pushItem(toEmit, strdup("div r10\n"));
+			return pushItem(toEmit, strdup("idiv r10d\n"));
 		case MOD_OP:
 			fprintf(stderr, "Error: Operator Modulus not implemented yet\n");
 			return 0;
@@ -1010,7 +1009,7 @@ int generateBinOperation(Codegen* codegen, BinOperation* binOperation, DynamicAr
 		case GTE_OP:
 		case EQ_OP:
 		case NEQ_OP:
-			if (!pushItem(toEmit, strdup("cmp rax, r10\n"))) return 0;
+			if (!pushItem(toEmit, strdup("cmp eax, r10d\n"))) return 0;
 			switch (binOperation->type) {
 				case ST_OP:
 					if(!pushItem(toEmit, strdup("setl al\n"))) return 0;
