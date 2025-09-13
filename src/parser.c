@@ -610,7 +610,6 @@ Expression* parsePrimaryExpression(Parser* parser) {
 				free(idToken);
 
 				if (expression->as.functionCall == NULL) {
-					freeExpression(expression);
 					goto error;
 				}
 			}
@@ -620,7 +619,6 @@ Expression* parsePrimaryExpression(Parser* parser) {
 				free(idToken);
 
 				if (expression->as.variable == NULL) {
-					freeExpression(expression);
 					goto error;
 				}
 			}
@@ -1456,6 +1454,7 @@ void freeFunctionStmt(void* functionStmt) {
 
 	free(func->id);
 	freeArray(func->params);
+	freeArray(func->toEmit);
 	freeBlockStmt(func->blockStmt);
 	free(func);
 }

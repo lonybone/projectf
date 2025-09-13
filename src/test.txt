@@ -1,14 +1,39 @@
+z = 0
 
-i32 fib(i32 x) {
-	if x <= 0 {
-		return 0
+i32 func() {
+
+	i = 0
+	n = 1000
+	while i < n {
+		if i == 4 {
+			z = 0
+			a = 0
+			b = 0
+			c = 0
+			d = 0
+			e = 0
+		}
+		else {
+			a = 0
+			b = 0
+			c = 0
+			d = 0
+			i = i + n
+		}
+		if i == 4 {
+			z = 0
+			a = 0
+			b = 0
+			c = 0
+			d = 0
+		}
 	}
-	if x <= 2 {
-		return 1
-	}
-	return fib(x-1) + fib(x-2)
+
+	z = i
+	return i
 }
 
 i32 main() {
-	return fib(40)
+	func()
+	return z
 }

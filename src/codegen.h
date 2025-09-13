@@ -1,3 +1,4 @@
+#include "parser.h"
 #include "utils.h"
 
 #ifndef CODEGEN_H
@@ -10,6 +11,7 @@ struct Codegen {
 	int maxSize;
 	char* buffer;
 	int stackOffset;
+	FunctionStmt* currentFunction;
 	DynamicArray* labelCounters;
 	DynamicArray* scopes;
 	DynamicArray* ast;

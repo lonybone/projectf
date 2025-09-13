@@ -85,7 +85,7 @@ const char* opTypeToString(BinOperationType type) {
 const char* unaryOpTypeToString(TokenType type) {
     switch (type) {
         case NOT:   return "!";
-        case MINUS: return "- (negate)";
+        case MINUS: return "-";
         default:    return "?";
     }
 }
@@ -369,12 +369,10 @@ int main(int argc, char* argv[]) {
 	printf("Generation Success!\n");
 	writeToFile(codegen, "compiled.asm");
 
-	/*
 	for (int i = 0; i < ast->size; i++) {
 		printStatement(ast->array[i], 0);
 		printf("\n");
 	}
-	*/
 
 	int status = system("nasm -f elf64 -g -F dwarf -o compiled.o compiled.asm");
 	if (status != 0) {

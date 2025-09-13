@@ -102,9 +102,12 @@ struct Statement {
 
 struct FunctionStmt {
 	char* id;
-	DynamicArray* params;
-	BlockStmt* blockStmt;
 	ValueType returnType;
+	int exprSpace;
+	int maxStack;
+	DynamicArray* params;
+	DynamicArray* toEmit;
+	BlockStmt* blockStmt;
 };
 
 struct FunctionCall {
