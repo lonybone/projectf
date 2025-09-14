@@ -103,7 +103,10 @@ struct Statement {
 struct FunctionStmt {
 	char* id;
 	ValueType returnType;
-	int exprSpace;
+	int callerSaved;
+	int maxCallerSaved;
+	int calleeSaved;
+	int maxCalleeSaved;
 	int maxStack;
 	DynamicArray* params;
 	DynamicArray* toEmit;
@@ -127,6 +130,7 @@ struct ReturnStmt {
 struct Expression {
 	ExpressionType type;
 	ValueType valueType;
+	int hasCall;
 	union {
 		Expression* expWrap;
 		FunctionCall* functionCall;

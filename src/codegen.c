@@ -13,8 +13,9 @@ Value* calculateGlobalExpression(Expression* expression);
 Value* addValues(BinOperationType binOpType, Value* left, Value* right);
 int generateStatement(Codegen* codegen, Statement* statement);
 int generateFunctionStatement(Codegen* codegen, FunctionStmt* function);
+int annotateCall(Codegen* codegen, Expression* expression);
 int generateExpression(Codegen* codegen, Expression* expression);
-int generateFunctionCall(Codegen* codegen, FunctionCall* function);
+int generateFunctionCall(Codegen* codegen, FunctionCall* function, int hasCall);
 int generateBinOperation(Codegen* codegen, BinOperation* binOperation);
 int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperationt);
 int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt, HashTable* scope, DynamicArray* params, int paramC);
@@ -22,12 +23,11 @@ int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt);
 int generateIfStmt(Codegen* codegen, IfStmt* ifStmt);
 int generateReturnStmt(Codegen* codegen, ReturnStmt* returnStmt);
 int generateAssignment(Codegen* codegen, Assignment* assignment);
-int generateValue(Codegen* codegen, Value* value);
-int generateVariable(Codegen* codegen, Variable* variable);
 int getVariableOffset(Codegen* codegen, char* id);
 HashTable* getScopeForVar(Codegen* codegen, char* id);
 int getTypeSize(ValueType type);
-const char* getRegister(int reg, int typeSize);
+const char* getFunctionArgRegister(int reg, int typeSize);
+const char* getCalleeSavedRegister(int reg, int typeSize);
 
 Codegen* initializeCodegen(DynamicArray* ast) {
 	
@@ -544,16 +544,23 @@ int generateStatement(Codegen* codegen, Statement* statement) {
 
 	switch (statement->type) {
 		case EXPRESSION_STMT:
+			annotateCall(codegen, statement->as.expression);
 			return generateExpression(codegen, statement->as.expression);
 		case FUNCTION_STMT:
+			for (int i = 0; i < statement->as.function->params->size; i++) {
+				annotateCall(codegen, statement->as.function->params->array[i]);
+			}
 			return generateFunctionStatement(codegen, statement->as.function);
 		case BLOCK_STMT:
 			return generateBlockStmt(codegen, statement->as.blockStmt, NULL, NULL, 0);
 		case WHILE_STMT:
+			annotateCall(codegen, statement->as.whileStmt->condition);
 			return generateWhileStmt(codegen, statement->as.whileStmt);
 		case IF_STMT:
+			annotateCall(codegen, statement->as.ifStmt->condition);
 			return generateIfStmt(codegen, statement->as.ifStmt);
 		case RETURN_STMT:
+			annotateCall(codegen, statement->as.returnStmt->expression);
 			return generateReturnStmt(codegen, statement->as.returnStmt);
 		case DECLARATION_STMT:
 		default:
@@ -637,17 +644,42 @@ int generateFunctionStatement(Codegen* codegen, FunctionStmt* function) {
 	}
 	freeArray(params);
 
-	function->maxStack = (function->maxStack + 15) & ~15;
+	char instr[256];
+	int stackAllocationSize = function->maxStack;
+
+	if (function->maxCalleeSaved >= 0 && (function->maxCalleeSaved) % 2 == 0) {
+	    stackAllocationSize += 8;
+	}
+
+	stackAllocationSize = (stackAllocationSize + 7) & ~7;
 
 	// function prologue
-	char prologue[256];
-	snprintf(prologue, sizeof(prologue), "; Start of Function \"%s\"\nsection .text\nglobal %s\n%s:\npush rbp\nmov rbp, rsp\nsub rsp, %d\n", function->id, function->id, function->id, function->maxStack);
-	if (!addToBuffer(codegen, prologue)) {
+	snprintf(instr, sizeof(instr), "; Start of Function \"%s\"\nsection .text\nglobal %s\n%s:\npush rbp\nmov rbp, rsp\n", function->id, function->id, function->id);
+	if (!addToBuffer(codegen, instr)) {
+		free(popItem(codegen->labelCounters));
+		return 0;
+	}
+	
+	// allocate space for local variables and align stack
+	snprintf(instr, sizeof(instr), "sub rsp, %d\n", stackAllocationSize);
+	if (!addToBuffer(codegen, instr)) {
 		free(popItem(codegen->labelCounters));
 		return 0;
 	}
 
-	// emitting the whole block
+	// push callee saved registers
+	if (function->maxCalleeSaved >= 0) {
+		for (int i = 0; i <= function->maxCalleeSaved; i++) {
+			const char* reg = getCalleeSavedRegister(i, 8);
+			snprintf(instr, sizeof(instr), "push %s\n", reg);
+			if (!addToBuffer(codegen, instr)) {
+				free(popItem(codegen->labelCounters));
+				return 0;
+			}
+		}
+	}
+
+	// emitting the function body
 	for (int i = 0; i < function->toEmit->size; i++) {
 		if (!addToBuffer(codegen, (char*)function->toEmit->array[i])) {
 			free(popItem(codegen->labelCounters));
@@ -656,11 +688,40 @@ int generateFunctionStatement(Codegen* codegen, FunctionStmt* function) {
 	}
 
 	// function epilogue
-	char epilogue[256];
 	const char* printEpilogue = (strcmp(function->id, "main") == 0) ? "\tmov rdi, message\n\tmov esi, eax\n\tmov rax, 0\n\tcall printf\n\tmov rax, 0\n" : "";
+	if (!addToBuffer(codegen, printEpilogue)) {
+		free(popItem(codegen->labelCounters));
+		return 0;
+	}
 
-	snprintf(epilogue, sizeof(epilogue), "%s%s_return:\nleave\nret\n; End of Function \"%s\"\n\n", printEpilogue, function->id, function->id);
-	if (!addToBuffer(codegen, epilogue)) return 0;
+	snprintf(instr, sizeof(instr), "%s_return:\n", function->id);
+	if (!addToBuffer(codegen, instr)) {
+		free(popItem(codegen->labelCounters));
+		return 0;
+	}
+
+	// pop callee-saved registers in reverse order
+	if (function->maxCalleeSaved >= 0) {
+		for (int i = function->maxCalleeSaved; i >= 0; i--) {
+			const char* reg = getCalleeSavedRegister(i, 8);
+			snprintf(instr, sizeof(instr), "pop %s\n", reg);
+			if (!addToBuffer(codegen, instr)) {
+				free(popItem(codegen->labelCounters));
+				return 0;
+			}
+		}
+	}
+
+	// deallocate local variable space
+	snprintf(instr, sizeof(instr), "add rsp, %d\n", stackAllocationSize);
+	if (!addToBuffer(codegen, instr)) {
+		free(popItem(codegen->labelCounters));
+		return 0;
+	}
+
+	// restore base pointer and return
+	snprintf(instr, sizeof(instr), "leave\nret\n; End of Function \"%s\"\n\n", function->id);
+	if (!addToBuffer(codegen, instr)) return 0;
 
 	free(popItem(codegen->labelCounters));
 
@@ -757,7 +818,7 @@ int generateBlockStmt(Codegen* codegen, BlockStmt* blockStmt, HashTable* scope, 
 	if (params != NULL) {
 		for (int i = 0; i < paramC; i++) {
 			Variable* param = ((Variable*)params->array[i]);
-			const char* reg = getRegister(i+1, getTypeSize(param->type));
+			const char* reg = getFunctionArgRegister(i+1, getTypeSize(param->type));
 			int paramOffset = *(int*)getValue(blockScope, param->id);
 			char instr[64];
 			snprintf(instr, sizeof(instr), "mov [rbp%+d], %s\n", paramOffset, reg);
@@ -815,7 +876,15 @@ int generateWhileStmt(Codegen* codegen, WhileStmt* whileStmt) {
 
 	if (!generateExpression(codegen, whileStmt->condition)) return 0;
 
-	snprintf(instr, sizeof(instr), "\ttest eax, eax\n\tjz %s_end_while_%d\n", functionID, labelCounter);
+	const char* testReg;
+	if (whileStmt->condition->hasCall) {
+		testReg = "rbx";
+	}
+	else {
+		testReg = "rax";
+	}
+
+	snprintf(instr, sizeof(instr), "\ttest %s, %s\n\tjz %s_end_while_%d\n", testReg, testReg, functionID, labelCounter);
 	if (!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 
 	if (!generateBlockStmt(codegen, whileStmt->body, NULL, NULL, 0)) return 0;
@@ -839,11 +908,18 @@ int generateIfStmt(Codegen* codegen, IfStmt* ifStmt) {
 	(*counterPtr)++;
 	char instr[64];
 	const char* functionId = codegen->currentFunction->id;
+	const char* testReg;
+	if (ifStmt->condition->hasCall) {
+		testReg = "rbx";
+	}
+	else {
+		testReg = "rax";
+	}
 
 	if (!generateExpression(codegen, ifStmt->condition)) return 0;
 
 	if (ifStmt->type == ONLYIF) {
-		snprintf(instr, sizeof(instr), "\ttest eax, eax\n\tjz %s_end_if_%d\n", functionId, labelCounter);
+		snprintf(instr, sizeof(instr), "\ttest %s, %s\n\tjz %s_end_if_%d\n", testReg, testReg, functionId, labelCounter);
 		if (!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 
 		if (!generateBlockStmt(codegen, ifStmt->trueBody, NULL, NULL, 0)) {
@@ -855,7 +931,7 @@ int generateIfStmt(Codegen* codegen, IfStmt* ifStmt) {
 		return 1;
 	}
 	else {
-		snprintf(instr, sizeof(instr), "\ttest eax, eax\n\tjz %s_else_%d\n", functionId, labelCounter);
+		snprintf(instr, sizeof(instr), "\ttest %s, %s\n\tjz %s_else_%d\n", testReg, testReg, functionId, labelCounter);
 		if (!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 
 		int prevMaxStack = codegen->currentFunction->maxStack;
@@ -901,9 +977,104 @@ int generateReturnStmt(Codegen* codegen, ReturnStmt* returnStmt) {
 		return 1;
 	}
 	char instr[64];
+	int typeSize = getTypeSize(returnStmt->expression->valueType);
+	const char* src;
+	const char* dst = getFunctionArgRegister(0, typeSize);
+	if (returnStmt->expression->hasCall) {
+		src = getCalleeSavedRegister(0, typeSize);
+		snprintf(instr, sizeof(instr), "\tmov %s, %s\n", dst, src);
+		if (!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
+	}
+	else {
+		src = getFunctionArgRegister(0, typeSize);
+	}
 	snprintf(instr, sizeof(instr), "\tjmp %s_return\n", functionId);
 	return pushItem(codegen->currentFunction->toEmit, strdup(instr));
 }
+
+static bool findCallsRecursive(Expression* expression);
+static void propagateCallsDownRecursive(Expression* expression, bool parentHasCall);
+
+int annotateCall(Codegen* codegen, Expression* expression) {
+	if (codegen == NULL || expression == NULL) {
+		return 0;
+	}
+
+	findCallsRecursive(expression);
+	propagateCallsDownRecursive(expression, false);
+	return expression->hasCall;
+}
+
+static bool findCallsRecursive(Expression* expression) {
+	if (expression == NULL) {
+		return false;
+	}
+
+	bool foundCall = false;
+	switch (expression->type) {
+		case FUNCTIONCALL_EXPR:
+			foundCall = true;
+			break;
+		case EXPR_WRAPPER_EXPR:
+			foundCall = findCallsRecursive(expression->as.expWrap);
+			break;
+		case ASSIGN_EXPR:
+			foundCall = findCallsRecursive(expression->as.assignment->expression);
+			break;
+		case UNARY_EXPR:
+			foundCall = findCallsRecursive(expression->as.unop->right);
+			break;
+		case BINOP_EXPR: {
+			bool leftHasCall = findCallsRecursive(expression->as.binop->left);
+			bool rightHasCall = findCallsRecursive(expression->as.binop->right);
+			foundCall = leftHasCall || rightHasCall;
+			break;
+		}
+		case VARIABLE_EXPR:
+		case VALUE_EXPR:
+			foundCall = false;
+			break;
+		default:
+			foundCall = false;
+			break;
+	}
+
+	expression->hasCall = foundCall;
+	return foundCall;
+}
+
+static void propagateCallsDownRecursive(Expression* expression, bool parentHasCall) {
+	if (expression == NULL) {
+		return;
+	}
+
+	expression->hasCall = parentHasCall || expression->hasCall;
+
+	switch (expression->type) {
+		case FUNCTIONCALL_EXPR:
+			for (int i = 0; i < expression->as.functionCall->params->size; i++) {
+				propagateCallsDownRecursive(expression->as.functionCall->params->array[i], expression->hasCall);
+			}
+			break;
+		case EXPR_WRAPPER_EXPR:
+			propagateCallsDownRecursive(expression->as.expWrap, expression->hasCall);
+			break;
+		case ASSIGN_EXPR:
+			propagateCallsDownRecursive(expression->as.assignment->expression, expression->hasCall);
+			break;
+		case UNARY_EXPR:
+			propagateCallsDownRecursive(expression->as.unop->right, expression->hasCall);
+			break;
+		case BINOP_EXPR:
+			propagateCallsDownRecursive(expression->as.binop->left, expression->hasCall);
+			propagateCallsDownRecursive(expression->as.binop->right, expression->hasCall);
+			break;
+		case VARIABLE_EXPR:
+		case VALUE_EXPR:
+			break;
+	}
+}
+	
 
 int generateExpression(Codegen* codegen, Expression* expression) {
 	if (codegen == NULL || expression == NULL) {
@@ -914,45 +1085,152 @@ int generateExpression(Codegen* codegen, Expression* expression) {
 		case EXPR_WRAPPER_EXPR:
 			return generateExpression(codegen, expression->as.expWrap);
 		case FUNCTIONCALL_EXPR:
-			return generateFunctionCall(codegen, expression->as.functionCall);
+			return generateFunctionCall(codegen, expression->as.functionCall, expression->hasCall);
 		case ASSIGN_EXPR:
 			return generateAssignment(codegen, expression->as.assignment);
 		case UNARY_EXPR:
 			return generateUnaryOperation(codegen, expression->as.unop);
 		case BINOP_EXPR:
 			return generateBinOperation(codegen, expression->as.binop);
-		case VARIABLE_EXPR:
-			return generateVariable(codegen, expression->as.variable);
-		case VALUE_EXPR:
-			return generateValue(codegen, expression->as.value);
+		case VARIABLE_EXPR: {
+			char instr[128];
+			const char* destReg;
+			int typeSize = getTypeSize(expression->as.variable->type);
+
+			if (expression->hasCall) {
+				destReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, typeSize);
+			}
+			else {
+				destReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, typeSize);
+			}
+
+			char varLocation[64];
+			HashTable* varScope = getScopeForVar(codegen, expression->as.variable->id);
+			if ((HashTable*)codegen->scopes->array[0] == varScope) {
+				snprintf(varLocation, sizeof(varLocation), "[%s]", expression->as.variable->id);
+			}
+			else {
+				int variableOffset = getVariableOffset(codegen, expression->as.variable->id);
+				snprintf(varLocation, sizeof(varLocation), "[rbp%d]", variableOffset);
+			}
+
+			snprintf(instr, sizeof(instr), "\tmov %s, %s\n", destReg, varLocation);
+			return pushItem(codegen->currentFunction->toEmit, strdup(instr));
+		}
+		case VALUE_EXPR: {
+			char instr[128];
+			switch (expression->as.value->type) {
+				case LONG_TYPE: {
+					const char* destReg;
+					int typeSize = getTypeSize(LONG_TYPE);
+
+					if (expression->hasCall) {
+						destReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, typeSize);
+					}
+					else {
+						destReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, typeSize);
+					}
+
+					snprintf(instr, sizeof(instr), "\tmov %s, %ld\n", destReg, expression->as.value->as.i_32);
+					return pushItem(codegen->currentFunction->toEmit, strdup(instr));
+				}
+				case DOUBLE_TYPE:
+					fprintf(stderr, "Error: Did not implement float Types yet :(\n");
+					return 0;
+				case BOOL_TYPE: {
+					const char* destReg;
+
+					if (expression->hasCall) {
+						destReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, 8);
+					}
+					else {
+						destReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, 8);
+					}
+
+					snprintf(instr, sizeof(instr), "\tmov %s, %d\n", destReg, expression->as.value->as.b);
+					return pushItem(codegen->currentFunction->toEmit, strdup(instr));
+				}
+				default:
+					fprintf(stderr, "Error: Unregognized Value Type in generateValue\n");
+					return 0;
+			}
+		}
 		default:
 			fprintf(stderr, "Error: Unexpected Expression type in generate Expression\n");
 			return 0;
 	}
 }
 
-int generateFunctionCall(Codegen* codegen, FunctionCall* function) {
+int generateFunctionCall(Codegen* codegen, FunctionCall* function, int hasCall) {
 	if (codegen == NULL || function == NULL) {
 		return 0;
 	}
 
 	char instr[64];
+
+	for (int i = 0; i < function->params->size; i++) {
+		findCallsRecursive(function->params->array[i]);
+	}
+
+	// calculate and store args
 	for (int i = 0; i < function->params->size; i++) {
 		Expression* arg = (Expression*)function->params->array[i];
-		if (!generateExpression(codegen, arg)) return 0;
 
+		if (codegen->currentFunction->calleeSaved+1 > codegen->currentFunction->maxCalleeSaved) {
+			if (codegen->currentFunction->calleeSaved > 4) {
+				fprintf(stderr, "Error: ran out of Registers when trying to evaluate Function Arguments\n");
+				return 0;
+			}
+			codegen->currentFunction->maxCalleeSaved = codegen->currentFunction->calleeSaved;
+		}
+
+		if (!generateExpression(codegen, arg)) return 0;
 
 		int argSize = getTypeSize(arg->valueType);
 		const char* opcode = (argSize == 1 || argSize == 2) ? "movzx" : "mov";
 
-		const char* dstReg = getRegister(i + 1, (argSize >= 4) ? argSize : 4);
-		const char* srcReg = getRegister(0, argSize);
+		const char* dstReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, (argSize >= 4) ? argSize : 8);
+		const char* srcReg;
+		
+		if (arg->hasCall) {
+			srcReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, argSize);
+		}
+		else {
+			srcReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, argSize);
+		}
 
 		snprintf(instr, sizeof(instr), "\t%s %s, %s\n", opcode, dstReg, srcReg);
+		codegen->currentFunction->calleeSaved++;
 		if (!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 	}
 
-	snprintf(instr, sizeof(instr), "\tcall %s\n", function->id);
+	// put args into correct registers
+	for (int i = 0; i < function->params->size; i++) {
+		Expression* arg = (Expression*)function->params->array[i];
+		int argSize = getTypeSize(arg->valueType);
+		const char* argSrc;
+		const char* argDst;
+		
+		argSrc = getCalleeSavedRegister(codegen->currentFunction->calleeSaved-(function->params->size-i), argSize);
+
+		argDst = getFunctionArgRegister(i+1, argSize);
+		snprintf(instr, sizeof(instr), "\tmov %s, %s\n", argDst, argSrc);
+		if (!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
+	}
+
+	int retTypeSize = getTypeSize(function->returnType);
+	const char* raxReg = getFunctionArgRegister(0, retTypeSize);
+	const char* dstReg;
+
+	if (hasCall) {
+		dstReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved-function->params->size, retTypeSize);
+	}
+	else {
+		dstReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, retTypeSize);
+	}
+
+	snprintf(instr, sizeof(instr), "\tcall %s\n\tmov %s, %s\n", function->id, dstReg, raxReg);
+	codegen->currentFunction->calleeSaved -= function->params->size;
 	return pushItem(codegen->currentFunction->toEmit, strdup(instr));
 }
 
@@ -961,20 +1239,81 @@ int generateBinOperation(Codegen* codegen, BinOperation* binOperation) {
 		return 0;
 	}
 
-	if (!generateExpression(codegen, binOperation->left)) return 0;
-	if (!pushItem(codegen->currentFunction->toEmit, strdup("\tpush rax\n\tsub rsp, 8\n"))) return 0;
-	if (!generateExpression(codegen, binOperation->right)) return 0;
-	if (!pushItem(codegen->currentFunction->toEmit, strdup("\tmov r10d, eax\n\tadd rsp, 8\n\tpop rax\n"))) return 0;
+	const char* leftReg;
+	const char* rightReg;
+	int typeSize = getTypeSize(binOperation->left->valueType);
 
+
+	int hasCall = binOperation->left->hasCall;
+
+	if (hasCall) {
+		leftReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, typeSize);
+
+		if (codegen->currentFunction->calleeSaved + 1 > codegen->currentFunction->maxCalleeSaved) {
+			if (codegen->currentFunction->calleeSaved > 4) {
+				fprintf(stderr, "Error: Ran out of Callee-Saved Registers when evaluating Expression\n");
+				return 0;
+			}
+			codegen->currentFunction->maxCalleeSaved = codegen->currentFunction->calleeSaved;
+		}
+		rightReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved + 1, typeSize);
+
+		if (!generateExpression(codegen, binOperation->left)) return 0;
+		codegen->currentFunction->calleeSaved++;
+		if (!generateExpression(codegen, binOperation->right)) return 0;
+		codegen->currentFunction->calleeSaved--;
+	}
+	else {
+		// dont use rdx for now, as it may be used in integer division as special register for overflow, also for mod operations later
+		int originalCallerSaved = codegen->currentFunction->callerSaved;
+
+		int leftIdx = originalCallerSaved;
+		if (leftIdx == 3) {
+			leftIdx++;
+		}
+		
+		int rightIdx = leftIdx + 1;
+		if (rightIdx == 3) {
+			rightIdx++;
+		}
+		
+		if (rightIdx > codegen->currentFunction->maxCallerSaved) {
+			if (rightIdx > 6) {
+				fprintf(stderr, "Error: Ran out of Caller-Saved Registers when evaluating Expression\n");
+				return 0;
+			}
+			codegen->currentFunction->maxCallerSaved = rightIdx;
+		}
+		
+		leftReg = getFunctionArgRegister(leftIdx, typeSize);
+		rightReg = getFunctionArgRegister(rightIdx, typeSize);
+		
+		codegen->currentFunction->callerSaved = leftIdx;
+		if (!generateExpression(codegen, binOperation->left)) codegen->currentFunction->callerSaved = originalCallerSaved;
+		
+		codegen->currentFunction->callerSaved = rightIdx;
+		if (!generateExpression(codegen, binOperation->right)) return 0;
+		
+		codegen->currentFunction->callerSaved = originalCallerSaved;
+	}
+
+	char instr[64];
 	switch (binOperation->type) {
 		case ADD_OP:
-			return pushItem(codegen->currentFunction->toEmit, strdup("\tadd eax, r10d\n"));
+			snprintf(instr, sizeof(instr), "\tadd %s, %s\n", leftReg, rightReg);
+			return pushItem(codegen->currentFunction->toEmit, strdup(instr));
 		case SUB_OP:
-			return pushItem(codegen->currentFunction->toEmit, strdup("\tsub eax, r10d\n"));
-		case MUL_OP:
-			return pushItem(codegen->currentFunction->toEmit, strdup("\timul r10d\n"));
-		case DIV_OP:
-			return pushItem(codegen->currentFunction->toEmit, strdup("\tidiv r10d\n"));
+			snprintf(instr, sizeof(instr), "\tsub %s, %s\n", leftReg, rightReg);
+			return pushItem(codegen->currentFunction->toEmit, strdup(instr));
+		case MUL_OP: {
+			snprintf(instr, sizeof(instr), "\timul %s, %s\n", leftReg, rightReg);
+			return pushItem(codegen->currentFunction->toEmit, strdup(instr));
+		}
+		case DIV_OP: {
+			const char* raxReg = getFunctionArgRegister(0, typeSize);
+			snprintf(instr, sizeof(instr), "\tmov %s, %s\n\tidiv %s\n", raxReg, rightReg, leftReg);
+			return pushItem(codegen->currentFunction->toEmit, strdup(instr));
+		}
 		case MOD_OP:
 			fprintf(stderr, "Error: Operator Modulus not implemented yet\n");
 			return 0;
@@ -984,31 +1323,56 @@ int generateBinOperation(Codegen* codegen, BinOperation* binOperation) {
 		case GTE_OP:
 		case EQ_OP:
 		case NEQ_OP:
-			if (!pushItem(codegen->currentFunction->toEmit, strdup("\tcmp eax, r10d\n"))) return 0;
+			snprintf(instr, sizeof(instr), "\tcmp %s, %s\n", leftReg, rightReg);
+			if (!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
+
+			const char* destBoolReg;
+			if (hasCall) {
+				destBoolReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, 1);
+			}
+			else {
+				destBoolReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, 1);
+			}
 			switch (binOperation->type) {
 				case ST_OP:
-					if(!pushItem(codegen->currentFunction->toEmit, strdup("\tsetl al\n"))) return 0;
+					snprintf(instr, sizeof(instr), "\tsetl %s\n", destBoolReg);
+					if(!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 					break;
 				case STE_OP:
-					if(!pushItem(codegen->currentFunction->toEmit, strdup("\tsetle al\n"))) return 0;
+					snprintf(instr, sizeof(instr), "\tsetle %s\n", destBoolReg);
+					if(!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 					break;
 				case GT_OP:
-					if(!pushItem(codegen->currentFunction->toEmit, strdup("\tsetg al\n"))) return 0;
+					snprintf(instr, sizeof(instr), "\tsetg %s\n", destBoolReg);
+					if(!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 					break;
 				case GTE_OP:
-					if(!pushItem(codegen->currentFunction->toEmit, strdup("\tsetge al\n"))) return 0;
+					snprintf(instr, sizeof(instr), "\tsetge %s\n", destBoolReg);
+					if(!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 					break;
 				case EQ_OP:
-					if(!pushItem(codegen->currentFunction->toEmit, strdup("\tsete al\n"))) return 0;
+					snprintf(instr, sizeof(instr), "\tsete %s\n", destBoolReg);
+					if(!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 					break;
 				case NEQ_OP:
-					if(!pushItem(codegen->currentFunction->toEmit, strdup("\tsetne al\n"))) return 0;
+					snprintf(instr, sizeof(instr), "\tsetne %s\n", destBoolReg);
+					if(!pushItem(codegen->currentFunction->toEmit, strdup(instr))) return 0;
 					break;
 				default:
 					fprintf(stderr, "Error: Encountered illegal Operand in generateBinOperation\n");
 					return 0;
 			}
-			return pushItem(codegen->currentFunction->toEmit, strdup("\tmovzx rax, al\n"));
+
+			const char* fullDestReg;
+			if (hasCall) {
+				fullDestReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, 8);
+			}
+			else {
+				fullDestReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, 8);
+			}
+
+			snprintf(instr, sizeof(instr), "\tmovzx %s, %s\n", fullDestReg, destBoolReg);
+			return pushItem(codegen->currentFunction->toEmit, strdup(instr));
 		default:
 			fprintf(stderr, "Error: Encountered illegal Operand generateBinOperation\n");
 			return 0;
@@ -1020,13 +1384,39 @@ int generateUnaryOperation(Codegen* codegen, UnaryOperation* unaryOperation) {
 		return 0;
 	}
 
+	const char* testReg;
+
+	char instr[128];
+
 	if (unaryOperation->type == NOT) {
+		const char* fullReg;
+		const char* dstReg;
+		if (unaryOperation->right->hasCall) {
+			testReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, 1);
+			dstReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, 1);
+			fullReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, 8);
+		}
+		else {
+			testReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, 1);
+			dstReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, 1);
+			fullReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, 8);
+		}
 		if (!generateExpression(codegen, unaryOperation->right)) return 0;
-		return pushItem(codegen->currentFunction->toEmit, strdup("\ttest eax, eax\n\tsetz al\n\tmovzx rax, al\n"));
+		snprintf(instr, sizeof(instr), "\tmovzx %s, %s\n\ttest %s, %s\n\tsetz %s\n", fullReg, dstReg, testReg, testReg, testReg);
+		return pushItem(codegen->currentFunction->toEmit, strdup(instr));
 	}
 	else if (unaryOperation->type == MINUS) {
+		int typeSize = getTypeSize(unaryOperation->right->valueType);
+
+		if (unaryOperation->right->hasCall) {
+			testReg = getCalleeSavedRegister(codegen->currentFunction->calleeSaved, typeSize);
+		}
+		else {
+			testReg = getFunctionArgRegister(codegen->currentFunction->callerSaved, typeSize);
+		}
 		if (!generateExpression(codegen, unaryOperation->right)) return 0;
-		return pushItem(codegen->currentFunction->toEmit, strdup("\tneg rax\n"));
+		snprintf(instr, sizeof(instr), "\tneg %s\n", testReg);
+		return pushItem(codegen->currentFunction->toEmit, strdup(instr));
 	}
 
 	fprintf(stderr, "Error: Unexpected Unary Operation Operand encountered in generateUnaryOperation: %d\n", unaryOperation->type);
@@ -1043,7 +1433,14 @@ int generateAssignment(Codegen* codegen, Assignment* assignment) {
 
 	ValueType variableType = assignment->variable->type;
 	int typeSize = getTypeSize(variableType);
-	const char* reg = getRegister(0, typeSize);
+
+	const char* reg;
+	if (assignment->expression->hasCall) {
+		reg = getCalleeSavedRegister(0, typeSize);
+	}
+	else {
+		reg = getFunctionArgRegister(0, typeSize);
+	}
 
 	HashTable* varScope = getScopeForVar(codegen, assignment->variable->id);
 	char varLocation[64];
@@ -1059,69 +1456,6 @@ int generateAssignment(Codegen* codegen, Assignment* assignment) {
 	snprintf(lastInstruction, sizeof(lastInstruction), "\tmov %s, %s\n", varLocation, reg);
 
 	return pushItem(codegen->currentFunction->toEmit, strdup(lastInstruction));
-}
-
-int generateVariable(Codegen* codegen, Variable* variable) {
-	if (codegen == NULL || variable == NULL) {
-		return 0;
-	}
-
-	ValueType variableType = variable->type;
-
-	if (variableType == UNKNOWN) {
-		return 1;
-	}
-
-	int variableOffset = getVariableOffset(codegen, variable->id);
-	HashTable* varScope = getScopeForVar(codegen, variable->id);
-	int typeSize = getTypeSize(variableType);
-	char instr[128];
-	char varLocation[64];
-
-	// global variable
-	if ((HashTable*)codegen->scopes->array[0] == varScope) {
-		snprintf(varLocation, sizeof(varLocation), "[%s]", variable->id);
-	}
-	else {
-		snprintf(varLocation, sizeof(varLocation), "[rbp%d]", variableOffset);
-	}
-
-	switch (typeSize) {
-		case 1:
-			snprintf(instr, sizeof(instr), "\tmovzx rax, BYTE %s\n", varLocation);
-			break;
-		case 4:
-			snprintf(instr, sizeof(instr), "\tmov eax, %s\n", varLocation);
-			break;
-		case 8:
-			snprintf(instr, sizeof(instr), "\tmov rax, %s\n", varLocation);
-			break;
-		default:
-			fprintf(stderr, "Error: Unsupported type size in generateVariable\n");
-			return 0;
-	}
-	return pushItem(codegen->currentFunction->toEmit, strdup(instr));
-}
-
-int generateValue(Codegen* codegen, Value* value) {
-	if (codegen == NULL || value == NULL) {
-		return 0;
-	}
-	char instr[64];
-	switch (value->type) {
-		case LONG_TYPE:
-			snprintf(instr, sizeof(instr), "\tmov eax, %ld\n", value->as.i_32);
-			return pushItem(codegen->currentFunction->toEmit, strdup(instr));
-		case DOUBLE_TYPE:
-			fprintf(stderr, "Error: Did not implement float Types yet :(\n");
-			return 0;
-		case BOOL_TYPE:
-			snprintf(instr, sizeof(instr), "\tmov al, %d\n\tmovzx rax, al\n", value->as.b);
-			return pushItem(codegen->currentFunction->toEmit, strdup(instr));
-		default:
-			fprintf(stderr, "Error: Unregognized Value Type in generateValue\n");
-			return 0;
-	}
 }
 
 int getVariableOffset(Codegen* codegen, char* id) {
@@ -1170,7 +1504,7 @@ int getTypeSize(ValueType type) {
 	}
 }
 
-const char* getRegister(int reg, int typeSize) {
+const char* getFunctionArgRegister(int reg, int typeSize) {
 	static const char* register_names[7][4] = {
 		{"al",  "ax",  "eax", "rax"},
 		{"dil", "di",  "edi", "rdi"},
@@ -1182,6 +1516,32 @@ const char* getRegister(int reg, int typeSize) {
 	};
 
 	if (reg > 6 || typeSize < 0) {
+		return NULL;
+	}
+
+	int size_index;
+	switch (typeSize) {
+		case 1: size_index = 0; break;
+		case 2: size_index = 1; break;
+		case 4: size_index = 2; break;
+		case 8: size_index = 3; break;
+		default:
+			return NULL;
+	}
+
+	return register_names[reg][size_index];
+}
+
+const char* getCalleeSavedRegister(int reg, int typeSize) {
+	static const char* register_names[5][4] = {
+		{"bl",  "bx",   "ebx",  "rbx"},
+		{"r12b","r12w", "r12d", "r12"},
+		{"r13b","r13w", "r13d", "r13"},
+		{"r14b","r14w", "r14d", "r14"},
+		{"r15b","r15w", "r15d", "r15"}
+	};
+
+	if (reg < 0 || reg > 4) {
 		return NULL;
 	}
 

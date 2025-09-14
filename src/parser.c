@@ -962,6 +962,10 @@ FunctionStmt* parseFunctionStmt(Parser* parser, Token* typeToken, Token* idToken
 
 	function->returnType = getTypeFromToken(typeToken);
 	function->id = parseToken(idToken);
+	function->calleeSaved = 0;
+	function->callerSaved = 0;
+	function->maxCalleeSaved = -1;
+	function->maxCallerSaved = -1;
 
 	if (function->id == NULL) {
 		freeFunctionStmt(function);

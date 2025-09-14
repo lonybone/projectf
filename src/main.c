@@ -369,11 +369,6 @@ int main(int argc, char* argv[]) {
 	printf("Generation Success!\n");
 	writeToFile(codegen, "compiled.asm");
 
-	for (int i = 0; i < ast->size; i++) {
-		printStatement(ast->array[i], 0);
-		printf("\n");
-	}
-
 	int status = system("nasm -f elf64 -g -F dwarf -o compiled.o compiled.asm");
 	if (status != 0) {
 		fprintf(stderr, "Error: Failed assembling file\n");
@@ -410,6 +405,13 @@ int main(int argc, char* argv[]) {
 	}
 
 	printf("Linking Success!\n");
+
+	/*
+	for (int i = 0; i < ast->size; i++) {
+		printStatement(ast->array[i], 0);
+		printf("\n");
+	}
+	*/
 
 	freeParser(parser);
 	freeArray(ast);
