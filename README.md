@@ -23,3 +23,11 @@ Dieses Projekt enstand aus Eigeninitiave aufgrund der Faszination gegenüber der
 ## Ausblick
 - Implementation aller oben genannten Limitationen ist in Planung. Jedoch sind alle Punkte davon sehr schwierig zu Konzepieren und werden demnach nur Etappenweise implementiert werden können.
 - Die größte Designfrage, die Art der synamischen Speicherzuweisung, steht noch aus. Dies ist die mit Abstand kritischste Entscheidung, da basierend darauf nicht nur die Performance sondern auch der ganze Workflow beeinflusst wird.
+
+## Projekt Statistiken
+Das Repository enthält **5,121 Zeilen C-Code** (4,733 Zeilen in .c Dateien und 388 Zeilen in .h Dateien).
+
+Um eine aktuelle Statistik zu erhalten, führe aus:
+```bash
+./count_loc.sh
+```
