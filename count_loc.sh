@@ -8,10 +8,12 @@ echo ""
 
 # Count C source files
 c_files=$(find ./src -name '*.c' 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+c_files=${c_files:-0}
 echo "C Source Files (.c):        $c_files lines"
 
 # Count C header files
 h_files=$(find ./src -name '*.h' 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+h_files=${h_files:-0}
 echo "C Header Files (.h):        $h_files lines"
 
 # Total C code
@@ -42,5 +44,6 @@ echo "--------------------------------"
 
 # Total all files (excluding .git)
 total_all=$(find . -type f -not -path './.git/*' -not -name 'count_loc.sh' 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+total_all=${total_all:-0}
 echo "Total (all files):          $total_all lines"
 echo "================================================"
